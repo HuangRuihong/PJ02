@@ -1,0 +1,28 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite databases (Keep production data out of Git to avoid merge conflicts)
+data/accounting.db
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# QR code images
+data/qr_*.png
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/

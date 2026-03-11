@@ -46,10 +46,12 @@
 ## 📤 第四階段：提交與分享 (Commit & Push)
 *完成功能後執行*
 
-1.  **暫存變更**：`git add .`
-2.  **提交描述**：`git commit -m "功能名稱: 簡短描述您的修改內容"`
-3.  **上傳雲端**：`git push origin master`
-4.  **告知夥伴**：在通訊軟體告知夥伴您已更新，請他執行同步。
+1.  **一鍵上傳 (推薦)**：雙擊 **`upload_changes.bat`**。
+    *   按照提示輸入您改了什麼，腳本會自動完成 `add` -> `commit` -> `push`。
+2.  **手動上傳 (進階)**：
+    *   `git add .`
+    *   `git commit -m "功能名稱: 簡短描述"`
+    *   `git push origin master`
 
 ---
 

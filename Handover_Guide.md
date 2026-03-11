@@ -51,16 +51,17 @@ git branch -M master
 git push -u origin master
 ```
 
-### 📥 夥伴如何連線 (由夥伴執行)
-夥伴只需執行：
-```bash
-git clone <您的遠端倉庫網址>
-```
+### 🔄 如何獲取夥伴更新 (推薦)
+直接執行根目錄的 **`sync_latest.bat`**。
+它會自動幫您：
+1. 從 GitHub 拉取最新代碼。
+2. 自動更新您的本地資料庫結構 (對齊 `schema.sql`)。
 
-### 🔄 日常開發流程
+### 🔄 手動同步流程 (日常開發)
 1. **更新代碼**：`git pull origin master`
-2. **提交變更**：`git add .` -> `git commit -m "描述變更"`
-3. **推送到雲端**：`git push origin master`
+2. **同步資料庫**：執行 `update_db.bat`
+3. **提交變更**：`git add .` -> `git commit -m "描述變更"`
+4. **推送到雲端**：`git push origin master`
 
 ### 🗄️ 同步資料庫結構 (Database Sync)
 當獲取最新的 `doc/schema.sql` 後，請執行根目錄的 **`update_db.bat`**。

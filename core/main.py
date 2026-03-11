@@ -33,7 +33,7 @@ class DebtSystem(PersonalService, GroupService):
                 return True
         except Exception: return False
         
-    def settle_debts(self, debtor_id, creditor_id, tx_ids):
+    def settle_specific_debts(self, debtor_id, creditor_id, tx_ids):
         """批量結算特定的欠款項目"""
         from datetime import datetime
         with self._get_connection() as conn:

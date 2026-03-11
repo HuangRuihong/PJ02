@@ -80,7 +80,13 @@ class AddTransactionDialog(ctk.CTkToplevel):
         self.amount_entry = ctk.CTkEntry(self, placeholder_text="總金額"); self.amount_entry.pack(pady=10, padx=40, fill="x")
         self.amount_entry.bind("<KeyRelease>", self.auto_split)
         
+        # 新增模式切換：平均 vs 自訂
         self.mode_var = ctk.StringVar(value="equal")
+        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom"], 
+                                                command=self.toggle_mode, variable=self.mode_var)
+        self.mode_switch.configure(values=["平均平分", "手動自訂"])
+        self.mode_switch.pack(pady=10)
+
         self.scroll = ctk.CTkScrollableFrame(self, label_text="分錢的人"); self.scroll.pack(pady=10, padx=20, fill="both", expand=True)
         
         # 動態生成成員勾選清單
@@ -92,35 +98,67 @@ class AddTransactionDialog(ctk.CTkToplevel):
             ctk.CTkCheckBox(f, text=m, variable=cv, command=self.auto_split).pack(side="left", padx=5)
             ent = ctk.CTkEntry(f, width=80); ent.pack(side="right"); ent.insert(0, "0"); self.split_entries[m] = ent
             
-        ctk.CTkButton(self, text="完成", command=self.submit).pack(pady=20)
+        ctk.CTkButton(self, text="完成並提交", command=self.submit).pack(pady=20)
+        self.auto_split()
+
+    def toggle_mode(self, _=None):
+        """切換分帳模式時重設欄位狀態"""
         self.auto_split()
 
     def auto_split(self, _=None):
-        """自動計算平分金額邏輯"""
+        """自動計算平分金額邏輯 / 或是解鎖自訂填寫欄位"""
+        mode = self.mode_var.get()
         try:
             total = int(self.amount_entry.get() or 0)
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
-            if not sel: return
-            base, rem = total // len(sel), total % len(sel)
-            for m, ent in self.split_entries.items():
-                ent.configure(state="normal"); ent.delete(0, "end")
-                if m in sel: 
-                    # 處理餘數，確保總額精準
-                    ent.insert(0, str(base + (1 if sel.index(m) < rem else 0)))
-                else: 
-                    ent.insert(0, "0")
-                ent.configure(state="readonly")
+            
+            if mode == "equal":
+                # 平均模式：禁止手動輸入，自動計算且處理餘數
+                if not sel: return
+                base, rem = total // len(sel), total % len(sel)
+                for m, ent in self.split_entries.items():
+                    ent.configure(state="normal"); ent.delete(0, "end")
+                    if m in sel: 
+                        ent.insert(0, str(base + (1 if sel.index(m) < rem else 0)))
+                    else: 
+                        ent.insert(0, "0")
+                    ent.configure(state="readonly")
+            else:
+                # 自訂模式：解鎖選中的成員欄位供手動填寫
+                for m, ent in self.split_entries.items():
+                    if self.check_vars[m].get() == 1:
+                        ent.configure(state="normal")
+                    else:
+                        ent.configure(state="normal"); ent.delete(0, "end"); ent.insert(0, "0")
+                        ent.configure(state="readonly")
         except: pass
 
     def submit(self):
-        """提交交易數據到主程式"""
+        """提交交易數據到主程式：增加總額校驗"""
         try:
             total = int(self.amount_entry.get())
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
+            
+            # 收集分帳數據
+            custom_splits = {}
+            current_sum = 0
+            for m in sel:
+                amt = int(self.split_entries[m].get() or 0)
+                custom_splits[m] = amt
+                current_sum += amt
+            
+            # 校驗總額是否相符
+            if current_sum != total:
+                from tkinter import messagebox
+                messagebox.showerror("金額錯誤", f"分帳總和 ({current_sum}) 與總金額 ({total}) 不符！\n請檢查各人金額。")
+                return
+
             if total > 0 and sel: 
-                self.callback(total, sel, None, self.desc_entry.get(), self.loc_entry.get())
+                # 傳遞 custom_splits 給回調，如果是平均分配則核心庫會重新計算（但這裡傳遞進去更穩健）
+                self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get())
                 self.destroy()
-        except: pass
+        except Exception as e:
+            print(f"Submit error: {e}")
 
 class AccountingGUI(ctk.CTk):
     """主程式類別：驅動整個 Split-it-Smart 系統的 GUI 核心"""
@@ -220,6 +258,10 @@ class AccountingGUI(ctk.CTk):
             # 優先切換至指定的群組 ID，否則切換至清單第一個
             g = next((x for x in groups if x["id"] == target_gid), groups[0])
             self.current_group_id, self.current_group_name, self.current_group_code = g["id"], g["name"], g["code"]
+        else:
+            self.current_group_id = None
+            self.current_group_name = "沒有任何群組"
+            self.current_group_code = "----"
         self.refresh_ui()
 
     def refresh_ui(self):

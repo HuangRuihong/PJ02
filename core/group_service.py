@@ -124,3 +124,198 @@ class GroupService(BaseService):
                 tx["pending_confirmations"] = [p[0] for p in cursor.fetchall()]
                 txs.append(tx)
             return txs
+
+    def get_group_balances(self, group_id):
+        """計算群組內各成員的淨餘額 (應收 - 應付)"""
+        balances = {}  # {user_id: net_amount}
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. 取得所有已確認且未結算的交易參與紀錄
+            cursor.execute("""
+                SELECT tp.user_id, tp.owed_amount, t.payer_id, t.transaction_id
+                FROM transaction_participants tp
+                JOIN transactions t ON tp.transaction_id = t.transaction_id
+                WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
+            """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
+            
+            rows = cursor.fetchall()
+            for user_id, owed_amt, payer_id, tid in rows:
+                balances[user_id] = balances.get(user_id, 0) - owed_amt
+                balances[payer_id] = balances.get(payer_id, 0) + owed_amt
+            
+            # 因為 payer 自己也是參與者，上面邏輯中 payer 會 -owed_amt 又 +owed_amt，正好抵銷，符合邏輯。
+            return {uid: amt for uid, amt in balances.items() if amt != 0}
+
+    def settle_debts(self, group_id, execution_user_id):
+        """執行結算：將所有已確認交易標記為已結算，並回傳建議的還款清單"""
+        balances = self.get_group_balances(group_id)
+        if not balances: return []
+
+        # 債務簡化演算法 (簡單版：應付者給應收者)
+        debtors = sorted([(u, amt) for u, amt in balances.items() if amt < 0], key=lambda x: x[1])
+        creditors = sorted([(u, amt) for u, amt in balances.items() if amt > 0], key=lambda x: x[1], reverse=True)
+        
+        settlement_plan = []
+        d_idx, c_idx = 0, 0
+        
+        while d_idx < len(debtors) and c_idx < len(creditors):
+            d_id, d_amt = debtors[d_idx]
+            c_id, c_amt = creditors[c_idx]
+            
+            pay_amt = min(abs(d_amt), c_amt)
+            settlement_plan.append({"from": d_id, "to": c_id, "amount": pay_amt})
+            
+            # 更新剩餘額度
+            debtors[d_idx] = (d_id, d_amt + pay_amt)
+            creditors[c_idx] = (c_id, c_amt - pay_amt)
+            
+            if debtors[d_idx][1] == 0: d_idx += 1
+            if creditors[c_idx][1] == 0: c_idx += 1
+
+        # 標記資料庫中的交易為已結算
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                # 取得這些交易 ID
+                cursor.execute("""
+                    SELECT DISTINCT t.transaction_id FROM transactions t
+                    JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
+                    WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
+                """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
+                tids = [r[0] for r in cursor.fetchall()]
+                
+                for tid in tids:
+                    cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (TransactionStatus.SETTLED.name, tid))
+                    cursor.execute("UPDATE transaction_participants SET status = ?, settled_at = ? WHERE transaction_id = ?", 
+                                (TransactionStatus.SETTLED.name, datetime.now(), tid))
+                
+                # --- 落實還款：為每一筆建議還款建立正式紀錄 ---
+                for item in settlement_plan:
+                    s_id = f"repay_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
+                    # 建立還款主表
+                    cursor.execute("""
+                        INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (s_id, group_id, item['from'], item['amount'], TransactionStatus.SETTLED.name, 
+                          TransactionType.SETTLEMENT.name, f"系統自動結算：還款給 {item['to']}", datetime.now()))
+                    
+                    # 建立還款參與者 (收款人)
+                    # 在還款交易中，payer 是還錢的人，participant 是收錢的人 (其 owed_amount 為負，代表收到錢)
+                    cursor.execute("""
+                        INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (s_id, item['to'], item['amount'], TransactionStatus.SETTLED.name, datetime.now()))
+                    
+                    # 同時也要幫 payer 自己建立一筆 (金額為 0 或抵銷)，以便在明細中看到
+                    # 這裡遵循 propose_transaction 邏輯，payer 也是參與者
+                    cursor.execute("""
+                        INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (s_id, item['from'], 0, TransactionStatus.SETTLED.name, datetime.now()))
+
+                conn.commit()
+                return settlement_plan
+            except Exception as e:
+                print(f"Settlement implementation error: {e}")
+                conn.rollback()
+                return []
+
+    def delete_group(self, group_id):
+        """徹底刪除群組及其關聯的所有數據 (交易、參與者、成員)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                # 1. 刪除交易參與者紀錄 (需要先找到該群組的所有交易 ID)
+                cursor.execute("""
+                    DELETE FROM transaction_participants 
+                    WHERE transaction_id IN (SELECT transaction_id FROM transactions WHERE group_id = ?)
+                """, (group_id,))
+                
+                # 2. 刪除交易主表紀錄
+                cursor.execute("DELETE FROM transactions WHERE group_id = ?", (group_id,))
+                
+                # 3. 刪除群組成員關聯
+                cursor.execute("DELETE FROM group_members WHERE group_id = ?", (group_id,))
+                
+                # 4. 刪除群組基本資料
+                cursor.execute("DELETE FROM groups WHERE group_id = ?", (group_id,))
+                
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Delete Group Error: {e}")
+                conn.rollback()
+                return False
+
+    def get_transaction_details(self, transaction_id):
+        """獲取特定交易的完整分帳細節 (包含所有參與者金額與狀態)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. 取得基本資訊
+            cursor.execute("""
+                SELECT transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp
+                FROM transactions WHERE transaction_id = ?
+            """, (transaction_id,))
+            r = cursor.fetchone()
+            if not r: return None
+            
+            tx = {"id": r[0], "group_id": r[1], "payer": r[2], "amount": r[3], "status": r[4], 
+                "type": r[5], "desc": r[6], "loc": r[7], "time": r[8]}
+            
+            # 2. 取得所有參與者詳情
+            cursor.execute("""
+                SELECT user_id, owed_amount, status, settled_at 
+                FROM transaction_participants WHERE transaction_id = ?
+            """, (transaction_id,))
+            tx["participants"] = [{"user_id": p[0], "amount": p[1], "status": p[2], "settled_at": p[3]} for p in cursor.fetchall()]
+            
+            return tx
+
+    def repay_transaction(self, group_id, tx_id, debtor_id, creditor_id, amount):
+        """欠款人針對單筆帳單進行還款：建立還款紀錄並標記原帳單為已結算"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                now = datetime.now()
+                # 1. 建立還款交易主表
+                s_id = f"repay_{now.strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
+                cursor.execute("""
+                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (s_id, group_id, debtor_id, amount, TransactionStatus.SETTLED.name,
+                      TransactionType.SETTLEMENT.name, f"手動還款：{debtor_id} 還款給 {creditor_id}", now))
+
+                # 2. 還款交易參與者：收款人
+                cursor.execute("""
+                    INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (s_id, creditor_id, amount, TransactionStatus.SETTLED.name, now))
+
+                # 3. 還款交易參與者：付款人自己
+                cursor.execute("""
+                    INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (s_id, debtor_id, 0, TransactionStatus.SETTLED.name, now))
+
+                # 4. 將原帳單中該欠款人的狀態更新為 SETTLED
+                cursor.execute("""
+                    UPDATE transaction_participants SET status = ?, settled_at = ?
+                    WHERE transaction_id = ? AND user_id = ?
+                """, (TransactionStatus.SETTLED.name, now, tx_id, debtor_id))
+
+                # 5. 若原帳單所有參與者皆已結算，也一併更新主表狀態
+                cursor.execute("""
+                    SELECT COUNT(*) FROM transaction_participants
+                    WHERE transaction_id = ? AND status != ?
+                """, (tx_id, TransactionStatus.SETTLED.name))
+                remaining = cursor.fetchone()[0]
+                if remaining == 0:
+                    cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?",
+                                   (TransactionStatus.SETTLED.name, tx_id))
+
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Repay Transaction Error: {e}")
+                conn.rollback()
+                return False

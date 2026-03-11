@@ -62,6 +62,10 @@ git clone <您的遠端倉庫網址>
 2. **提交變更**：`git add .` -> `git commit -m "描述變更"`
 3. **推送到雲端**：`git push origin master`
 
+### 🗄️ 同步資料庫結構 (Database Sync)
+當獲取最新的 `doc/schema.sql` 後，請執行根目錄的 **`update_db.bat`**。
+這會自動將 SQL 中的新表格或新欄位套用到您的本地資料庫。
+
 ## 5. 如何執行 (How to Run)
 ### ⚡️ 一鍵執行 (推薦)
 在 Windows 環境下，直接點擊根目錄的 **`run.bat`** 即可啟動程式。

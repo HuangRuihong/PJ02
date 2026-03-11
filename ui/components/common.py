@@ -17,7 +17,7 @@ class LoginFrame(ctk.CTkFrame):
     def __init__(self, parent, login_callback):
         super().__init__(parent, fg_color="transparent")
         self.login_callback = login_callback
-        ctk.CTkLabel(self, text="Split-it-Smart ✨", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=(100, 20))
+        ctk.CTkLabel(self, text="記帳系統", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=(100, 20))
         ctk.CTkLabel(self, text="歡迎回來，請輸入帳號進入系統", font=ctk.CTkFont(size=14), text_color="gray70").pack(pady=(0, 40))
         self.user_entry = ctk.CTkEntry(self, placeholder_text="使用者名稱", width=300, height=45); self.user_entry.pack(pady=10)
         self.remember_var = ctk.BooleanVar(value=True)

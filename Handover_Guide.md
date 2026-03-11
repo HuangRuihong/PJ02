@@ -35,7 +35,23 @@ mysalf/
     - 負責 `ui/group/` 內的介面。
     - 負責 `core/group_service.py` 內的群組與交易分帳邏輯。
 
-## 4. 如何執行 (How to Run)
+## 4. 如何協作 (Git Workflow)
+本專案已初始化 Git，請遵循以下流程：
+1. **複製專案**：
+   ```bash
+   git clone <專案網址>
+   ```
+2. **開發流程**：
+   - 建立分支：`git checkout -b <您的名字>-<功能名>`
+   - 提交變更：`git add .` -> `git commit -m "描述變更"`
+   - 推送分支：`git push origin <分支名>`
+3. **注意事項**：
+   - `.gitignore` 已設定排除 `accounting.db`，請手動透過其他方式交換資料庫內容，或各自維護本地測試數據。
+
+## 5. 如何執行 (How to Run)
+### ⚡️ 一鍵執行 (推薦)
+在 Windows 環境下，直接點擊根目錄的 **`run.bat`** 即可啟動程式。
+(註：此批次檔會調用 `run.py` 來確保跨平台編碼正確並檢查環境變數。)
 在 `mysalf/` 目錄下執行：
 ```bash
 python ui/AccountingGUI.py

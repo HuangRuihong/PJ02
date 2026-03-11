@@ -4,7 +4,7 @@ import sys
 
 def run_git_setup():
     print("="*50)
-    print("Git 遠端連結與首次上傳工具 🚀")
+    print("Split-it-Smart Git 自動設置工具")
     print("="*50)
 
     # 1. 檢查 Git 是否初始化

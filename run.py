@@ -4,7 +4,7 @@ import subprocess
 
 def run():
     print("="*50)
-    print("Split-it-Smart ✨ 啟動程式")
+    print("Split-it-Smart 啟動程式")
     print("="*50)
     
     print(f"[1/2] 正在檢查 Python 環境: {sys.version.split()[0]}")

@@ -3,7 +3,7 @@ import sys
 
 def run_git_upload():
     print("="*50)
-    print("Split-it-Smart 代碼上傳工具 🚀")
+    print("Split-it-Smart 代碼上傳工具")
     print("="*50)
 
     # 1. 檢查狀態
@@ -32,7 +32,7 @@ def run_git_upload():
 
     if push_res.returncode == 0:
         print("\n" + "="*50)
-        print("✨ 上傳成功！夥伴現在可以看見您的更動了。")
+        print("上傳成功！夥伴現在可以看見您的更動了。")
         print("="*50)
     else:
         print("\n[錯誤] 上傳失敗。請檢查網路連線或 GitHub 權限。")

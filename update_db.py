@@ -3,7 +3,7 @@ import os
 
 def update_database():
     print("="*50)
-    print("資料庫結構同步工具 🗄️")
+    print("資料庫結構同步工具")
     print("="*50)
 
     db_path = os.path.join("data", "accounting.db")
@@ -32,7 +32,7 @@ def update_database():
         conn.commit()
         conn.close()
         print("-" * 50)
-        print("✨ 資料庫結構已成功同步至最新狀態！")
+        print("資料庫結構已成功同步至最新狀態！")
         
     except sqlite3.Error as e:
         print(f"\n[資料庫錯誤] {e}")

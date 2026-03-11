@@ -13,6 +13,9 @@ data/accounting.db
 # QR code images
 data/qr_*.png
 
+# Local configurations
+data/config.json
+
 # Environments
 .venv/
 env/

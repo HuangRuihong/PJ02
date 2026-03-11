@@ -13,7 +13,7 @@ class GroupFrame(ctk.CTkFrame):
         self.info_label = ctk.CTkLabel(self.header, text="群組動態", font=ctk.CTkFont(size=20, weight="bold"))
         self.info_label.pack(side="left")
         
-        self.add_btn = ctk.CTkButton(self.header, text="+ 紀錄", width=100, command=self.open_add_tx)
+        self.add_btn = ctk.CTkButton(self.header, text="+ 記一筆", width=100, command=self.open_add_tx)
         self.add_btn.pack(side="right", padx=10)
         
         self.scroll = ctk.CTkScrollableFrame(self, label_text="最近活動")

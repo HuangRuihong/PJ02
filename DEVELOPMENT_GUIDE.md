@@ -11,13 +11,12 @@
 
 ### 1. 核心實體定義 (Core Entities)
 - 定義 `Transaction` 與 `TransactionStatus` 枚舉（Pending, Confirmed, Rejected）。
-- 確立交易的基礎狀態機流轉邏輯。
+- 構建基於 `TransactionStatus` 的非同步確認流轉邏輯（從提案到共識）。
 
 ### 2. 資料持久化與安全性 (Data Persistence & Atomicity)
 - **資料庫選擇**：採用 SQLite 以實現零配置、單檔案存儲。
 - **Schema 設計**：建立 `groups`, `transactions`, `participants` 表，並規範 SQL 變更必須記錄於 `doc/`。
 - **事務保護 (Atomicity)**：實作 `propose_transaction` 的原子性寫入，防止產生孤兒帳單。
-- **精度處理 (Precision)**：全面使用「分 (Integer)」作為金額儲存單位，杜絕浮點數運算誤差。
 
 ### 3. 業務邏輯實作 (Business Logic)
 - **群組管理**：實現多租戶隔離的基礎。
@@ -33,21 +32,26 @@
 
 ```text
 mysalf/
-├── core/           # [核心段落] 系統大腦
-│   └── main.py     # 包含 DebtSystem 類別，負責所有業務處理與資料庫互動
+├── core/           # [核心段落] 系統大腦 (Service Oriented)
+│   ├── main.py     # 整合入口 (Facade)，提供 UI 調用
+│   ├── base.py     # 基礎連線與架構
+│   ├── models.py   # 資料模型與枚舉
+│   ├── personal_service.py # 個人/好友邏輯
+│   └── group_service.py    # 群組/分帳邏輯
 │
 ├── data/           # [資料段落] 持久化存儲
-│   └── accounting.db # 生產環境資料庫檔案
+│   └── accounting.db # 正式環境資料庫
 │
-├── ui/             # [展示段落] 使用者介面
-│   └── AccountingGUI.py # 預留位，用於開發桌面版圖形界面 (CustomTkinter)
+├── ui/             # [展示段落] 使用者介面 (Categorized)
+│   ├── AccountingGUI.py # 主導航框架
+│   ├── personal/   # 個人/好友視圖
+│   ├── group/      # 群組協作視圖
+│   └── components/ # 共用組件 (如登入、彈窗)
 │
 ├── doc/            # [文件段落] 工程規範
-│   └── schema.sql  # 資料庫結構定義與變更紀錄
+│   └── schema.sql  # 資料庫結構定義
 │
-└── test/           # [驗證段落] 品質保證
-    ├── test_main.py         # 核心邏輯整合測試
-    └── test_db_atomicity.py # 資料庫原子性與精度專項測試
+└── run.bat         # [便捷工具] Windows 一鍵啟動
 ```
 
 ---

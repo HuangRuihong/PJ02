@@ -7,7 +7,7 @@
 *   **完整原始碼**：整個 `mysalf/` 資料夾。
 *   **開發環境**：
     - Python 3.10+
-    - 必要套件：`pip install customtkinter pillow qrcode`
+    - 必要套件：`pip install -r requirements.txt` (內含 customtkinter, pillow, qrcode)
 *   **資料庫檔案**：`data/accounting.db` (內含基礎資料結構)。
 
 ## 2. 專案構造 (Project Structure)

@@ -7,10 +7,8 @@ def run():
     print("Split-it-Smart ✨ 啟動程式")
     print("="*50)
     
-    # 1. 檢查 Python 環境
     print(f"[1/2] 正在檢查 Python 環境: {sys.version.split()[0]}")
     
-    # 2. 檢查必要套件
     try:
         import customtkinter
         import PIL
@@ -22,7 +20,6 @@ def run():
         input("\n請按任意鍵結束...")
         return
 
-    # 3. 啟動主程式
     print("[2/2] 正在啟動主程式 (ui/AccountingGUI.py)...")
     print("-" * 50)
     

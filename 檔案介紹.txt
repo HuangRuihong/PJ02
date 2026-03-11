@@ -1,0 +1,44 @@
+mysalf/
+├── (根目錄自動化工具)
+│   ├── run.bat              # ✅ 一鍵啟動 (自動檢查 Python 環境與處理編碼)
+│   ├── run.py               # 啟動腳本核心邏輯
+│   ├── sync_latest.bat      # 🔄 一鍵同步 (同時抓取 Git 代碼 + 對齊資料庫結構)
+│   ├── upload_changes.bat   # 📤 一鍵上傳 (引導式 add-commit-push 流程)
+│   ├── upload_changes.py    # 上傳腳本核心 (負責詢問修改描述)
+│   ├── setup_git.bat        # ⚙️ 首次設置 GitHub 連結專用工具
+│   ├── update_db.bat        # 🗄️ 單獨更新資料庫結構時使用
+│   └── requirements.txt     # 📦 環境依賴清單 (pip install -r ...)
+│
+├── (開發者手冊與清單)
+│   ├── 前置作業SOP.md       # 🏁 開工前必讀 (環境、同步流程)
+│   ├── 完成後作業SOP.md     # 🚀 完工後必讀 (開發規範、上傳流程)
+│   ├── Handover_Guide.md     # 🤝 全域交接指南 (專案架構導覽)
+│   ├── implementation_plan.md# 📅 未來開發藍圖 (里程碑與計畫)
+│   ├── features.md          # 📜 完整功能列表與現狀
+│   ├── DEVELOPMENT_GUIDE.md # 🧠 技術細節與 API 參考
+│   └── .gitignore           # 🚫 Git 忽略清單 (排除資料庫、IDE、緩存檔案)
+│
+├── core/                    # 🧠 核心邏輯層 (後端大腦)
+│   ├── main.py              # 總入口 (Facade)，提供 UI 調用的所有功能
+│   ├── base.py              # 資料庫底層連線與基礎初始化
+│   ├── models.py            # 數據模型 (Enum、常數定義)
+│   ├── personal_service.py  # 👤 個人功能邏輯 (個人帳單、好友、QR 碼)
+│   └── group_service.py     # 👥 群組功能邏輯 (群組管理、分帳演算法)
+│
+├── ui/                      # 🎨 介面展示層 (前端外觀)
+│   ├── AccountingGUI.py     # 主程式框架 (負責導航、側邊欄切換)
+│   ├── personal/            # 👤 個人區塊
+│   │   ├── personal_frame.py# 個人首頁介面
+│   │   └── friends_frame.py # 好友管理介面
+│   ├── group/               # 👥 群組區塊
+│   │   └── group_frame.py   # 群組動態與分帳介面
+│   └── components/          # 🧩 共用元件
+│       └── common.py        # 登入介面、通用對話框與按鈕
+│
+├── data/                    # 💾 數據存儲層
+│   ├── accounting.db        # 正式 SQLite 資料庫檔案 (不進入 Git)
+│   ├── config.json          # 個人化本地設定 (不進入 Git)
+│   └── *.png                # 生成的 QR 碼圖檔
+│
+└── doc/                     # 📄 結構定義層
+    └── schema.sql           # 資料庫原始表格結構 (Git 同步的核心依據)

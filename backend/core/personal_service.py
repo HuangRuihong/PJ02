@@ -30,7 +30,7 @@ class PersonalService(BaseService):
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         
-        path = f"data/qr_{user_id}.png"
+        path = f"backend/data/qr_{user_id}.png"
         img.save(path)
         return os.path.abspath(path)
 

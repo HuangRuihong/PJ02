@@ -6,12 +6,13 @@ from datetime import datetime
 from PIL import Image
 import tkinter.filedialog as fd
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core.main import DebtSystem, TransactionStatus, TransactionType
-from ui.components.common import LoginFrame, QRDialog
-from ui.personal.personal_frame import PersonalFrame
-from ui.group.group_frame import GroupFrame
-from ui.personal.friends_frame import FriendsFrame
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from backend.core.main import DebtSystem, TransactionStatus, TransactionType
+from frontend.ui.components.common import LoginFrame
+from frontend.ui.components.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog, QRDialog
+from frontend.ui.personal.personal_frame import PersonalFrame
+from frontend.ui.group.group_frame import GroupFrame
+from frontend.ui.personal.friends_frame import FriendsFrame
 
 try:
     from pyzbar.pyzbar import decode
@@ -20,145 +21,9 @@ try:
 except ImportError:
     SCAN_SUPPORT = False
 
-CONFIG_PATH = "data/config.json"
+CONFIG_PATH = "backend/data/config.json"
 
-class JoinGroupDialog(ctk.CTkToplevel):
-    """加入群組對話框：讓使用者輸入 4 位邀群碼以加入特定群組"""
-    def __init__(self, parent, callback):
-        super().__init__(parent)
-        self.title("加入群組")
-        self.geometry("350x250")
-        self.callback = callback
-        
-        # UI 配置
-        ctk.CTkLabel(self, text="輸入 4 位邀群碼", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
-        self.code_entry = ctk.CTkEntry(self, placeholder_text="A7B2", width=150, height=40)
-        self.code_entry.pack(pady=10)
-        ctk.CTkButton(self, text="加入", command=self.submit).pack(pady=20)
 
-    def submit(self):
-        """提交邀群碼"""
-        code = self.code_entry.get().strip().upper()
-        if len(code) == 4: 
-            self.callback(code)
-            self.destroy()
-
-class CreateGroupDialog(ctk.CTkToplevel):
-    """建立群組對話框：讓使用者設定群組名稱並生成新群組"""
-    def __init__(self, parent, callback):
-        super().__init__(parent)
-        self.title("建立新群組")
-        self.geometry("350x250")
-        self.callback = callback
-        
-        # UI 配置
-        ctk.CTkLabel(self, text="群組名稱", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
-        self.name_entry = ctk.CTkEntry(self, placeholder_text="合租、旅遊", width=200)
-        self.name_entry.pack(pady=10)
-        ctk.CTkButton(self, text="建立", command=self.submit).pack(pady=20)
-
-    def submit(self):
-        """提交新群組名稱"""
-        name = self.name_entry.get().strip()
-        if name: 
-            self.callback(name)
-            self.destroy()
-
-class AddTransactionDialog(ctk.CTkToplevel):
-    """新增交易對話框：處理消費金額錄入、參與者選擇與自動分帳邏輯"""
-    def __init__(self, parent, members, callback, pre_selected=None):
-        super().__init__(parent)
-        self.title("記一筆消費")
-        self.geometry("450x750")
-        self.callback, self.members = callback, members
-        self.split_entries, self.check_vars = {}, {}
-        
-        # 支出內容輸入區
-        ctk.CTkLabel(self, text="這筆支出是什麼？", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=10)
-        self.desc_entry = ctk.CTkEntry(self, placeholder_text="內容"); self.desc_entry.pack(pady=5, padx=40, fill="x")
-        self.loc_entry = ctk.CTkEntry(self, placeholder_text="地點"); self.loc_entry.pack(pady=5, padx=40, fill="x")
-        self.amount_entry = ctk.CTkEntry(self, placeholder_text="總金額"); self.amount_entry.pack(pady=10, padx=40, fill="x")
-        self.amount_entry.bind("<KeyRelease>", self.auto_split)
-        
-        # 新增模式切換：平均 vs 自訂
-        self.mode_var = ctk.StringVar(value="equal")
-        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom"], 
-                                                command=self.toggle_mode, variable=self.mode_var)
-        self.mode_switch.configure(values=["平均平分", "手動自訂"])
-        self.mode_switch.pack(pady=10)
-
-        self.scroll = ctk.CTkScrollableFrame(self, label_text="分錢的人"); self.scroll.pack(pady=10, padx=20, fill="both", expand=True)
-        
-        # 動態生成成員勾選清單
-        for m in self.members:
-            f = ctk.CTkFrame(self.scroll, fg_color="transparent"); f.pack(fill="x", pady=2)
-            # 判斷是否預選（如果是好友快速記帳，則預選該好友）
-            sel = 1 if (not pre_selected or m == pre_selected or m == parent.current_user) else 0
-            cv = ctk.IntVar(value=sel); self.check_vars[m] = cv
-            ctk.CTkCheckBox(f, text=m, variable=cv, command=self.auto_split).pack(side="left", padx=5)
-            ent = ctk.CTkEntry(f, width=80); ent.pack(side="right"); ent.insert(0, "0"); self.split_entries[m] = ent
-            
-        ctk.CTkButton(self, text="完成並提交", command=self.submit).pack(pady=20)
-        self.auto_split()
-
-    def toggle_mode(self, _=None):
-        """切換分帳模式時重設欄位狀態"""
-        self.auto_split()
-
-    def auto_split(self, _=None):
-        """自動計算平分金額邏輯 / 或是解鎖自訂填寫欄位"""
-        mode = self.mode_var.get()
-        try:
-            total = int(self.amount_entry.get() or 0)
-            sel = [m for m, v in self.check_vars.items() if v.get() == 1]
-            
-            if mode == "equal":
-                # 平均模式：禁止手動輸入，自動計算且處理餘數
-                if not sel: return
-                base, rem = total // len(sel), total % len(sel)
-                for m, ent in self.split_entries.items():
-                    ent.configure(state="normal"); ent.delete(0, "end")
-                    if m in sel: 
-                        ent.insert(0, str(base + (1 if sel.index(m) < rem else 0)))
-                    else: 
-                        ent.insert(0, "0")
-                    ent.configure(state="readonly")
-            else:
-                # 自訂模式：解鎖選中的成員欄位供手動填寫
-                for m, ent in self.split_entries.items():
-                    if self.check_vars[m].get() == 1:
-                        ent.configure(state="normal")
-                    else:
-                        ent.configure(state="normal"); ent.delete(0, "end"); ent.insert(0, "0")
-                        ent.configure(state="readonly")
-        except: pass
-
-    def submit(self):
-        """提交交易數據到主程式：增加總額校驗"""
-        try:
-            total = int(self.amount_entry.get())
-            sel = [m for m, v in self.check_vars.items() if v.get() == 1]
-            
-            # 收集分帳數據
-            custom_splits = {}
-            current_sum = 0
-            for m in sel:
-                amt = int(self.split_entries[m].get() or 0)
-                custom_splits[m] = amt
-                current_sum += amt
-            
-            # 校驗總額是否相符
-            if current_sum != total:
-                from tkinter import messagebox
-                messagebox.showerror("金額錯誤", f"分帳總和 ({current_sum}) 與總金額 ({total}) 不符！\n請檢查各人金額。")
-                return
-
-            if total > 0 and sel: 
-                # 傳遞 custom_splits 給回調，如果是平均分配則核心庫會重新計算（但這裡傳遞進去更穩健）
-                self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get())
-                self.destroy()
-        except Exception as e:
-            print(f"Submit error: {e}")
 
 class AccountingGUI(ctk.CTk):
     """主程式類別：驅動整個 Split-it-Smart 系統的 GUI 核心"""

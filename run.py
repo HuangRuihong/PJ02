@@ -20,11 +20,11 @@ def run():
         input("\n請按任意鍵結束...")
         return
 
-    print("[2/2] 正在啟動主程式 (ui/AccountingGUI.py)...")
+    print("[2/2] 正在啟動主程式 (frontend/ui/AccountingGUI.py)...")
     print("-" * 50)
     
     try:
-        cmd = [sys.executable, "ui/AccountingGUI.py"]
+        cmd = [sys.executable, "frontend/ui/AccountingGUI.py"]
         subprocess.run(cmd, check=True)
     except Exception as e:
         print(f"\n[提示] 程式已停止執行。")

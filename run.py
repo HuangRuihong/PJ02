@@ -4,7 +4,7 @@ import subprocess
 
 def run():
     print("="*50)
-    print("Split-it-Smart 啟動程式")
+    print("mysalf - 多人群組本地記帳系統 啟動程式")
     print("="*50)
     
     print(f"[1/2] 正在檢查 Python 環境: {sys.version.split()[0]}")
@@ -13,10 +13,13 @@ def run():
         import customtkinter
         import PIL
         import qrcode
+        import matplotlib
+        import tkcalendar
+        import schedule
     except ImportError as e:
         print(f"\n[錯誤] 缺少必要套件: {e.name}")
         print("請執行以下指令安裝：")
-        print("pip install customtkinter pillow qrcode")
+        print("pip install -r requirements.txt")
         input("\n請按任意鍵結束...")
         return
 

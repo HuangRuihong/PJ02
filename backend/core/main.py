@@ -103,23 +103,44 @@ class DebtSystem(PersonalService, GroupService):
             """, (user_id, user_id))
             return [{"id": r[0], "payer": r[1], "amount": r[2], "date": r[3], "receiver": r[4]} for r in cursor.fetchall()]
 
+    def get_personal_history(self, user_id):
+        """獲取個人的所有支出歷史 (Facade)"""
+        return self.personal_service.get_personal_history(user_id)
+
     def check_overdue_transactions(self):
-        """自動化催告與期限控管"""
+        """
+        自動化逾期掃描：根據金額動態建議期限。
+        - ≤ 500 元: 7 天
+        - 501 ~ 2000 元: 14 天
+        - > 2000 元: 30 天
+        """
         from datetime import datetime
         overdue_list = []
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT tp.transaction_id, tp.user_id, t.timestamp, t.amount
+                SELECT tp.transaction_id, tp.user_id, t.timestamp, tp.owed_amount, t.description
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE tp.status = ? AND t.type = 'EXPENSE'
             """, (TransactionStatus.PENDING.name,))
             
-            for tx_id, user_id, ts_str, total_amount_twd in cursor.fetchall():
+            for tx_id, user_id, ts_str, amount, desc in cursor.fetchall():
                 ts = datetime.fromisoformat(ts_str) if isinstance(ts_str, str) else ts_str
                 diff_days = (datetime.now() - ts).days
-                limit_days = 5 if total_amount_twd < 500 else 3
-                if diff_days >= limit_days:
-                    overdue_list.append((tx_id, user_id))
+                
+                # 動態期限邏輯
+                if amount <= 500: limit = 7
+                elif amount <= 2000: limit = 14
+                else: limit = 30
+                
+                if diff_days >= limit:
+                    overdue_list.append({
+                        "id": tx_id, 
+                        "user": user_id, 
+                        "amount": amount, 
+                        "days": diff_days, 
+                        "limit": limit,
+                        "desc": desc
+                    })
         return overdue_list

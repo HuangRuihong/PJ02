@@ -110,18 +110,29 @@ class GroupFrame(ctk.CTkFrame):
             )
 
     def handle_settle(self):
-        """處理結算按鈕點擊"""
-        plan = self.system.settle_debts(self.gid, self.current_user)
+        """處理結算按鈕點擊：詢問模式"""
+        from tkinter import messagebox
+        # 詢問結算模式
+        mode_choice = messagebox.askquestion("選擇結算模式", 
+            "請選擇結算模式：\n\n"
+            "是 (Yes): 原始債權模式 (保留直接代墊關係)\n"
+            "否 (No): 債務抵銷模式 (群組成員轉帳極小化)\n"
+            "取消: 中止結算", icon='question', type='yesnocancel')
+        
+        if mode_choice == 'cancel': return
+        
+        mode = "ORIGINAL" if mode_choice == 'yes' else "SIMPLIFIED"
+        
+        plan = self.system.settle_debts(self.gid, self.current_user, mode=mode)
         if not plan:
-            # 彈出提示：沒有可結算的項目
-            from tkinter import messagebox
             messagebox.showinfo("結算結果", "目前沒有已確認且未結算的交易項目。")
             return
             
         # 顯示結算計畫結果
         result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']}" for p in plan])
-        from tkinter import messagebox
-        messagebox.showinfo("結算與還款落實", f"經過抵銷計算，建議還款方式如下：\n\n{result_str}\n\n✅ 上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。")
+        messagebox.showinfo("結算與還款落實", 
+            f"已使用「{mode}」模式完成計算，建議還款方式如下：\n\n{result_str}\n\n"
+            "✅ 上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。")
         self.winfo_toplevel().refresh_ui()
 
     def handle_delete(self):

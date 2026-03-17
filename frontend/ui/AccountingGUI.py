@@ -2,9 +2,13 @@ import customtkinter as ctk
 import sys
 import os
 import json
+import threading
+import time
+import schedule
 from datetime import datetime
 from PIL import Image
 import tkinter.filedialog as fd
+import tkinter.messagebox as mbox
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from backend.core.main import DebtSystem, TransactionStatus, TransactionType
@@ -13,6 +17,8 @@ from frontend.ui.components.dialogs import JoinGroupDialog, CreateGroupDialog, A
 from frontend.ui.personal.personal_frame import PersonalFrame
 from frontend.ui.group.group_frame import GroupFrame
 from frontend.ui.personal.friends_frame import FriendsFrame
+from frontend.ui.analysis.analysis_frame import AnalysisFrame
+from frontend.ui.analysis.calendar_frame import CalendarFrame
 
 try:
     from pyzbar.pyzbar import decode
@@ -24,12 +30,11 @@ except ImportError:
 CONFIG_PATH = "backend/data/config.json"
 
 
-
 class AccountingGUI(ctk.CTk):
-    """主程式類別：驅動整個 Split-it-Smart 系統的 GUI 核心"""
+    """主程式類別：驅動整個 mysalf 系統的 GUI 核心"""
     def __init__(self):
         super().__init__()
-        self.title("Split-it-Smart")
+        self.title("mysalf - 多人群組本地記帳系統")
         self.geometry("1150x900")
         ctk.set_appearance_mode("dark")
         
@@ -44,8 +49,27 @@ class AccountingGUI(ctk.CTk):
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True)
         
+        # 啟動排程執行緒
+        self.stop_scheduler = threading.Event()
+        self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
+        self.scheduler_thread.start()
+        
         # 檢查自動登入狀態
         self.check_auto_login()
+
+    def run_scheduler(self):
+        """背景執行 schedule 任務"""
+        schedule.every().day.at("10:00").do(self.background_check)
+        while not self.stop_scheduler.is_set():
+            schedule.run_pending()
+            time.sleep(10)
+
+    def background_check(self):
+        """例行性背景檢查 (可擴充發送外部通知邏輯)"""
+        if self.current_user:
+            overdue = self.system.check_overdue_transactions()
+            # 這裡簡單以 Print 示意，實際可實作系統通知
+            print(f"Daily Check: Found {len(overdue)} overdue items.")
 
     def check_auto_login(self):
         """啟動時檢查是否存在記住身分的功能"""
@@ -85,6 +109,20 @@ class AccountingGUI(ctk.CTk):
         for w in self.main_container.winfo_children(): w.destroy()
         self.setup_ui()
         self.load_initial_data()
+        self.after(1000, self.check_overdue_and_remind) # 延遲一秒顯示逾期提醒
+
+    def check_overdue_and_remind(self):
+        """啟動檢查逾期帳務並彈窗提醒"""
+        overdue = self.system.check_overdue_transactions()
+        # 過濾出與當前使用者相關的 (或是全部提醒)
+        my_overdue = [o for o in overdue if o["user"] == self.current_user]
+        if my_overdue:
+            msg = "⚠️ 逾期未處理提醒 ⚠️\n\n"
+            for o in my_overdue[:5]: # 最多顯示 5 筆
+                msg += f"- {o['desc']} (金額: {o['amount']}, 已逾期 {o['days']} 天)\n"
+            if len(my_overdue) > 5: msg += "...等更多項目\n"
+            msg += "\n請盡速至「我的帳單」或相關群組進行確認與結清。"
+            mbox.showwarning("逾期帳務提醒", msg)
 
     def setup_ui(self):
         """建構主畫面佈局：側邊欄與分頁系統"""
@@ -93,8 +131,15 @@ class AccountingGUI(ctk.CTk):
         self.sidebar.pack(side="left", fill="y")
         
         ctk.CTkLabel(self.sidebar, text=f"👤 {self.current_user}", font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
-        ctk.CTkButton(self.sidebar, text="登出系統", command=self.logout, fg_color="transparent").pack(pady=(0, 20))
+        ctk.CTkButton(self.sidebar, text="登出系統", command=self.logout, fg_color="transparent").pack(pady=(0, 10))
         
+        # 全局快速記帳按鈕 (NEW)
+        self.quick_add_btn = ctk.CTkButton(self.sidebar, text="📝 快速記帳", 
+                                          command=self.open_global_add_tx,
+                                          fg_color="#1f538d", hover_color="#14375e", height=40)
+        self.quick_add_btn.pack(pady=10, padx=10, fill="x")
+        
+        ctk.CTkLabel(self.sidebar, text="選擇群組", font=ctk.CTkFont(size=12)).pack(pady=(10, 0))
         self.group_opt = ctk.CTkOptionMenu(self.sidebar, values=[], command=self.switch_group)
         self.group_opt.pack(padx=10, pady=5)
         
@@ -106,7 +151,7 @@ class AccountingGUI(ctk.CTk):
         self.tabview = ctk.CTkTabview(self.main_container)
         self.tabview.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         
-        # 初始化三大功能分頁 (採用重構後的目錄結構匯入)
+        # 初始化各大功能分頁
         self.tab_p = PersonalFrame(self.tabview.add("我的帳單"), self.system, self.current_user)
         self.tab_p.pack(fill="both", expand=True)
         
@@ -115,6 +160,12 @@ class AccountingGUI(ctk.CTk):
         
         self.tab_f = FriendsFrame(self.tabview.add("我的好友"), self.system, self.current_user)
         self.tab_f.pack(fill="both", expand=True)
+        
+        self.tab_a = AnalysisFrame(self.tabview.add("統計報表"), self.system, self.current_user)
+        self.tab_a.pack(fill="both", expand=True)
+        
+        self.tab_c = CalendarFrame(self.tabview.add("帳務日曆"), self.system, self.current_user)
+        self.tab_c.pack(fill="both", expand=True)
 
     def load_initial_data(self, target_gid=None):
         """初始數據載入：取得使用者所屬群組並設定首個群組"""
@@ -138,6 +189,8 @@ class AccountingGUI(ctk.CTk):
         self.tab_p.refresh()
         self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
         self.tab_f.refresh()
+        self.tab_a.refresh(self.current_group_id)
+        self.tab_c.refresh(self.current_group_id)
 
     def switch_group(self, name):
         """切換目前活動群組"""
@@ -165,15 +218,31 @@ class AccountingGUI(ctk.CTk):
         if gid: 
             self.load_initial_data(target_gid=gid)
 
+    def open_global_add_tx(self):
+        """側邊欄全局快速記帳：支援私帳與當前群組"""
+        # 如果有當前群組，取得成員；否則僅顯示自己
+        mems = [self.current_user]
+        if self.current_group_id:
+            mems = self.system.get_group_members(self.current_group_id)
+        
+        AddTransactionDialog(self, mems, self.add_tx_cb)
+
     def open_add_tx(self, force_participant=None):
-        """開啟新增交易對話框"""
+        """(原有的) 針對特定群組開啟新增交易對話框"""
         mems = self.system.get_group_members(self.current_group_id)
         AddTransactionDialog(self, mems, self.add_tx_cb, pre_selected=force_participant)
 
-    def add_tx_cb(self, amt, sel, custom, desc, loc):
-        """交易對話框提交後，呼叫核心系統儲存交易"""
+    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False):
+        """交易對話框提交後的回調"""
         tid = f"tx_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        if self.system.propose_transaction(tid, self.current_user, amt, sel, self.current_group_id, custom, description=desc, location=loc): 
+        
+        # 根據是否為私帳模式決定目標群組
+        target_gid = "PERSONAL" if is_private else self.current_group_id
+        
+        # 安全檢查：若非私帳且無當前群組，則轉為私帳 (防止邊際案例)
+        if not target_gid: target_gid = "PERSONAL"
+        
+        if self.system.propose_transaction(tid, self.current_user, amt, sel, target_gid, custom, description=desc, location=loc): 
             self.refresh_ui()
 
     def confirm_tx(self, tid): 
@@ -181,11 +250,12 @@ class AccountingGUI(ctk.CTk):
         self.system.confirm_transaction(self.current_user, tid)
         self.refresh_ui()
 
-    def run_settlement(self):
-        """(待開發項目) 執行結算邏輯"""
-        sel = [tid for tid, (v, _) in self.payable_vars.items() if v.get()]
-        if sel and self.system.settle_debts(self.current_user, self.payable_vars[sel[0]][1], sel): 
-            self.refresh_ui()
+    def run_settlement(self, mode="ORIGINAL"):
+        """執行結算邏輯"""
+        if self.current_group_id:
+            if self.system.settle_debts(self.current_group_id, self.current_user, mode=mode): 
+                self.refresh_ui()
+                mbox.showinfo("結算成功", f"此群組已依照「{mode}」模式完成結算！")
 
     def show_my_qr(self): 
         """顯示個人 QR Code 名片"""

@@ -9,14 +9,14 @@ class GroupService(BaseService):
     """群組服務模組：負責群組管理、成員維護與交易分帳 (由 Person B 負責)"""
 
     def create_group_with_code(self, creator_id, group_name):
-        """建立群組並產生 4 位英數邀群碼"""
-        join_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        """建立群組並產生 6 位英數邀群碼"""
+        join_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
         group_id = f"g_{datetime.now().strftime('%m%d%H%M%S')}"
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 while cursor.execute("SELECT 1 FROM groups WHERE join_code = ?", (join_code,)).fetchone():
-                    join_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+                    join_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                 
                 cursor.execute("INSERT INTO groups (group_id, name, join_code) VALUES (?, ?, ?)", (group_id, group_name, join_code))
                 cursor.execute("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)", (group_id, creator_id))
@@ -130,53 +130,75 @@ class GroupService(BaseService):
         balances = {}  # {user_id: net_amount}
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # 1. 取得所有已確認且未結算的交易參與紀錄
+            # 取得所有已確認且未結算的交易參與紀錄
             cursor.execute("""
-                SELECT tp.user_id, tp.owed_amount, t.payer_id, t.transaction_id
+                SELECT tp.user_id, tp.owed_amount, t.payer_id
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
             """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
             
             rows = cursor.fetchall()
-            for user_id, owed_amt, payer_id, tid in rows:
+            for user_id, owed_amt, payer_id in rows:
                 balances[user_id] = balances.get(user_id, 0) - owed_amt
                 balances[payer_id] = balances.get(payer_id, 0) + owed_amt
             
-            # 因為 payer 自己也是參與者，上面邏輯中 payer 會 -owed_amt 又 +owed_amt，正好抵銷，符合邏輯。
             return {uid: amt for uid, amt in balances.items() if amt != 0}
 
-    def settle_debts(self, group_id, execution_user_id):
-        """執行結算：將所有已確認交易標記為已結算，並回傳建議的還款清單"""
-        balances = self.get_group_balances(group_id)
-        if not balances: return []
-
-        # 債務簡化演算法 (簡單版：應付者給應收者)
-        debtors = sorted([(u, amt) for u, amt in balances.items() if amt < 0], key=lambda x: x[1])
-        creditors = sorted([(u, amt) for u, amt in balances.items() if amt > 0], key=lambda x: x[1], reverse=True)
-        
+    def settle_debts(self, group_id, execution_user_id, mode="ORIGINAL"):
+        """
+        執行結算：
+        - ORIGINAL (預設): 保留原始債權關係，計算每位成員之間的淨額。
+        - SIMPLIFIED: 債務抵銷模式，利用演算法極小化轉帳次數。
+        """
         settlement_plan = []
-        d_idx, c_idx = 0, 0
         
-        while d_idx < len(debtors) and c_idx < len(creditors):
-            d_id, d_amt = debtors[d_idx]
-            c_id, c_amt = creditors[c_idx]
+        if mode == "SIMPLIFIED":
+            balances = self.get_group_balances(group_id)
+            if not balances: return []
             
-            pay_amt = min(abs(d_amt), c_amt)
-            settlement_plan.append({"from": d_id, "to": c_id, "amount": pay_amt})
+            # 債務簡化演算法 (應付者給應收者路徑最小化)
+            debtors = sorted([(u, amt) for u, amt in balances.items() if amt < 0], key=lambda x: x[1])
+            creditors = sorted([(u, amt) for u, amt in balances.items() if amt > 0], key=lambda x: x[1], reverse=True)
             
-            # 更新剩餘額度
-            debtors[d_idx] = (d_id, d_amt + pay_amt)
-            creditors[c_idx] = (c_id, c_amt - pay_amt)
-            
-            if debtors[d_idx][1] == 0: d_idx += 1
-            if creditors[c_idx][1] == 0: c_idx += 1
+            d_idx, c_idx = 0, 0
+            while d_idx < len(debtors) and c_idx < len(creditors):
+                d_id, d_amt = debtors[d_idx]
+                c_id, c_amt = creditors[c_idx]
+                pay_amt = min(abs(d_amt), c_amt)
+                settlement_plan.append({"from": d_id, "to": c_id, "amount": pay_amt})
+                debtors[d_idx] = (d_id, d_amt + pay_amt)
+                creditors[c_idx] = (c_id, c_amt - pay_amt)
+                if debtors[d_idx][1] == 0: d_idx += 1
+                if creditors[c_idx][1] == 0: c_idx += 1
+        else:
+            # ORIGINAL 模式：統計每一對人之間的債權關係
+            pair_debts = {} # {(debtor, creditor): amount}
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT tp.user_id, tp.owed_amount, t.payer_id
+                    FROM transaction_participants tp
+                    JOIN transactions t ON tp.transaction_id = t.transaction_id
+                    WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
+                """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
+                for debtor, amount, creditor in cursor.fetchall():
+                    if debtor == creditor: continue
+                    pair = tuple(sorted((debtor, creditor)))
+                    # 決定方向後加減
+                    if debtor < creditor:
+                        pair_debts[pair] = pair_debts.get(pair, 0) + amount
+                    else:
+                        pair_debts[pair] = pair_debts.get(pair, 0) - amount
+                
+                for (u1, u2), net in pair_debts.items():
+                    if net > 0: settlement_plan.append({"from": u1, "to": u2, "amount": net})
+                    elif net < 0: settlement_plan.append({"from": u2, "to": u1, "amount": abs(net)})
 
-        # 標記資料庫中的交易為已結算
+        # 標記更新狀態至資料庫
         with self._get_connection() as conn:
             cursor = conn.cursor()
             try:
-                # 取得這些交易 ID
                 cursor.execute("""
                     SELECT DISTINCT t.transaction_id FROM transactions t
                     JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
@@ -189,34 +211,22 @@ class GroupService(BaseService):
                     cursor.execute("UPDATE transaction_participants SET status = ?, settled_at = ? WHERE transaction_id = ?", 
                                 (TransactionStatus.SETTLED.name, datetime.now(), tid))
                 
-                # --- 落實還款：為每一筆建議還款建立正式紀錄 ---
                 for item in settlement_plan:
                     s_id = f"repay_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
-                    # 建立還款主表
                     cursor.execute("""
                         INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (s_id, group_id, item['from'], item['amount'], TransactionStatus.SETTLED.name, 
-                          TransactionType.SETTLEMENT.name, f"系統自動結算：還款給 {item['to']}", datetime.now()))
+                          TransactionType.SETTLEMENT.name, f"系統自動結算({mode})：還款給 {item['to']}", datetime.now()))
                     
-                    # 建立還款參與者 (收款人)
-                    # 在還款交易中，payer 是還錢的人，participant 是收錢的人 (其 owed_amount 為負，代表收到錢)
-                    cursor.execute("""
-                        INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (s_id, item['to'], item['amount'], TransactionStatus.SETTLED.name, datetime.now()))
-                    
-                    # 同時也要幫 payer 自己建立一筆 (金額為 0 或抵銷)，以便在明細中看到
-                    # 這裡遵循 propose_transaction 邏輯，payer 也是參與者
-                    cursor.execute("""
-                        INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (s_id, item['from'], 0, TransactionStatus.SETTLED.name, datetime.now()))
-
+                    cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at) VALUES (?, ?, ?, ?, ?)",
+                                (s_id, item['to'], item['amount'], TransactionStatus.SETTLED.name, datetime.now()))
+                    cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at) VALUES (?, ?, ?, ?, ?)",
+                                (s_id, item['from'], 0, TransactionStatus.SETTLED.name, datetime.now()))
                 conn.commit()
                 return settlement_plan
             except Exception as e:
-                print(f"Settlement implementation error: {e}")
+                print(f"Settlement Error: {e}")
                 conn.rollback()
                 return []
 

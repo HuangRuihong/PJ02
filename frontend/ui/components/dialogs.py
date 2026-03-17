@@ -61,9 +61,9 @@ class AddTransactionDialog(ctk.CTkToplevel):
         
         # 新增模式切換：平均 vs 自訂
         self.mode_var = ctk.StringVar(value="equal")
-        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom"], 
+        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom", "private"], 
                                                 command=self.toggle_mode, variable=self.mode_var)
-        self.mode_switch.configure(values=["平均平分", "手動自訂"])
+        self.mode_switch.configure(values=["平均分帳", "手動自訂", "個人私帳"])
         self.mode_switch.pack(pady=10)
 
         self.scroll = ctk.CTkScrollableFrame(self, label_text="分錢的人"); self.scroll.pack(pady=10, padx=20, fill="both", expand=True)
@@ -88,12 +88,23 @@ class AddTransactionDialog(ctk.CTkToplevel):
         self.auto_split()
 
     def auto_split(self, _=None):
-        """自動計算平分金額邏輯 / 或是解鎖自訂填寫欄位"""
+        """自動計算分帳邏輯 / 或是解鎖自訂填寫欄位"""
         mode = self.mode_var.get()
         try:
             total = int(self.amount_entry.get() or 0)
-            sel = [m for m, v in self.check_vars.items() if v.get() == 1]
+            target_user = getattr(self.master, "current_user", "")
             
+            if mode == "private":
+                # 私帳模式：僅勾選自己，金額為總額，全部鎖定
+                for m, v in self.check_vars.items():
+                    v.set(1 if m == target_user else 0)
+                    ent = self.split_entries[m]
+                    ent.configure(state="normal"); ent.delete(0, "end")
+                    ent.insert(0, str(total) if m == target_user else "0")
+                    ent.configure(state="readonly")
+                return
+
+            sel = [m for m, v in self.check_vars.items() if v.get() == 1]
             if mode == "equal":
                 # 平均模式：禁止手動輸入，自動計算且處理餘數
                 if not sel: return
@@ -116,9 +127,18 @@ class AddTransactionDialog(ctk.CTkToplevel):
         except: pass
 
     def submit(self):
-        """提交交易數據到主程式：增加總額校驗"""
+        """提交交易數據到主程式：增加總額校驗與私帳模式判定"""
         try:
             total = int(self.amount_entry.get())
+            mode = self.mode_var.get()
+            
+            if mode == "private":
+                # 私帳模式：強制僅付款人，並標記 target_gid 為 PERSONAL
+                target_user = getattr(self.master, "current_user", "")
+                self.callback(total, [target_user], {target_user: total}, self.desc_entry.get(), self.loc_entry.get(), is_private=True)
+                self.destroy()
+                return
+
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
             
             # 收集分帳數據
@@ -136,7 +156,6 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 return
 
             if total > 0 and sel: 
-                # 傳遞 custom_splits 給回調
                 self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get())
                 self.destroy()
         except Exception as e:

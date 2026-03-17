@@ -61,6 +61,19 @@ class PersonalService(BaseService):
             
         return payables, receivables
 
+    def get_personal_history(self, user_id):
+        """獲取個人所有的支出流水 (含私帳 PRIVATE 與各群組代墊)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 取得該用戶作為 Payer 的所有交易
+            cursor.execute("""
+                SELECT transaction_id, group_id, amount, description, timestamp, status
+                FROM transactions 
+                WHERE payer_id = ? AND type = 'EXPENSE'
+                ORDER BY timestamp DESC
+            """, (user_id,))
+            return [{"id": r[0], "group": r[1], "amount": r[2], "desc": r[3], "time": r[4], "status": r[5]} for r in cursor.fetchall()]
+
     def get_user_summary(self, user_id):
         """獲取使用者與所有人的債務關係簡要總結"""
         payables, receivables = self.get_personal_debts(user_id)

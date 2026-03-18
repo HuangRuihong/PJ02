@@ -145,7 +145,7 @@ class AccountingGUI(ctk.CTk):
         
         ctk.CTkButton(self.sidebar, text="+ 加入群組", command=self.open_join_group).pack(pady=5, padx=10, fill="x")
         ctk.CTkButton(self.sidebar, text="+ 建立新群組", command=self.open_create_group).pack(pady=5, padx=10, fill="x")
-        ctk.CTkButton(self.sidebar, text="我的 QR 碼", command=self.show_my_qr, fg_color="transparent", border_width=1).pack(pady=20, padx=10, fill="x")
+        # "我的 QR 碼" 按鈕已移至 friends_frame.py 中
         
         # --- 主內容區 (Tabs) ---
         self.tabview = ctk.CTkTabview(self.main_container)

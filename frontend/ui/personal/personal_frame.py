@@ -30,37 +30,78 @@ class PersonalFrame(ctk.CTkFrame):
         self.history_frame = ctk.CTkFrame(self.main_scroll, fg_color="transparent")
         self.history_frame.pack(fill="x", padx=10, pady=10)
 
-    def load_mock_data(self):
-        """
-        這裡全部使用【假資料 (Mock Data)】。
-        因為這段程式碼非常簡單直觀，未來等隊友把後端寫好後，
-        你只要把這些變數換成 self.system.get_XXX() 就能直接串接！
-        """
-        # 1. 財務總覽 (總餘額)
+    def load_real_data(self):
+        """直接從後端資料庫取得真實數據"""
+        # 1. 財務總覽計算
+        summary = self.system.get_user_summary(self.current_user) # dict {friend: balance}
+        total_assets = sum(summary.values())
+        receivables = sum(val for val in summary.values() if val > 0)
+        payables = sum(abs(val) for val in summary.values() if val < 0)
+        
         self.mock_dashboard = {
-            "total_assets": 850,     # 總淨資產
-            "receivables": 1200,     # 別人欠我的總額 (應收)
-            "payables": 350          # 我欠別人的總額 (應付)
+            "total_assets": total_assets,
+            "receivables": receivables,
+            "payables": payables
         }
         
-        # 2. 待辦事項 / 通知匣 (完全對應企劃書的【非同步驗證機制】)
-        # status="Pending" 代表這是一筆還沒被正式寫進帳本的款項，需要你的驗證
-        self.mock_pending_inbox = [
-            {"id": "tx_01", "payer": "室友A", "desc": "幫忙代購好市多衛生紙", "amount": 75, "date": "2023-11-01", "status": "Pending"},
-            {"id": "tx_02", "payer": "室友B", "desc": "昨晚叫的宵夜披薩", "amount": 200, "date": "2023-11-02", "status": "Pending"}
-        ]
+        # 2. 待辦事項 (從應付帳款 payables 中篩出 PENDING 的項目)
+        debts, _ = self.system.get_personal_debts(self.current_user)
+        self.mock_pending_inbox = []
+        for d in debts:
+            if d['status'] == 'PENDING':
+                self.mock_pending_inbox.append({
+                    "id": d['tx_id'], "payer": d['creditor'], "desc": d['desc'],
+                    "amount": d['amount'], "date": str(d['date'])[:10], "status": "Pending",
+                    "type": d.get('type'), "loc": d.get('loc')
+                })
+                
+        # 3. 個人歷史流水紀錄
+        try:
+            history = self.system.get_personal_history(self.current_user)
+            self.mock_history = []
+            for tx in history:
+                is_payer = tx.get('payer') == self.current_user
+                self.mock_history.append({
+                    "id": tx['id'], "desc": tx['desc'] or "無描述", 
+                    "amount": tx['amount'], "date": str(tx['time'])[:10], 
+                    "type": "我付錢" if is_payer else "別人付錢"
+                })
+        except Exception as e:
+            print("History Load Error:", e)
+            self.mock_history = []
+
+    def do_confirm(self, tx_id, tx_type=None, loc_str=None, payer_id=None):
+        """處理真實確認交易連動 / 審核結清申請"""
+        from tkinter import messagebox
         
-        # 3. 個人最新的詳細帳務 (對應月度結算)
-        self.mock_history = [
-            {"id": "tx_03", "desc": "繳水電費", "amount": 500, "date": "2023-10-25", "type": "我付錢"},
-            {"id": "tx_04", "desc": "買公用垃圾袋", "amount": 120, "date": "2023-10-20", "type": "別人付錢"}
-        ]
+        if tx_type == "REPAY_REQUEST":
+            tx_ids = loc_str.split(",") if loc_str else []
+            if self.system.settle_specific_debts(payer_id, self.current_user, tx_ids):
+                self.system.confirm_transaction(self.current_user, tx_id)
+                messagebox.showinfo("成功", "✅ 已確認收到款項，相關債務已正式銷帳！")
+                self.winfo_toplevel().refresh_ui()
+            else:
+                messagebox.showerror("錯誤", "結清處理失敗！")
+        else:
+            if self.system.confirm_transaction(self.current_user, tx_id):
+                messagebox.showinfo("成功", "✅ 已確認此筆帳款，正式納入結算！")
+                self.winfo_toplevel().refresh_ui()
+
+    def do_reject(self, tx_id, tx_type=None):
+        """處理拒絕交易邏輯"""
+        from tkinter import messagebox
+        if hasattr(self.system, "reject_transaction") and self.system.reject_transaction(self.current_user, tx_id):
+            action_name = "還款回報" if tx_type == "REPAY_REQUEST" else "帳款"
+            messagebox.showinfo("拒絕", f"❌ 已退回這筆{action_name}。")
+            self.winfo_toplevel().refresh_ui()
+        else:
+            messagebox.showinfo("拒絕", "❌ 已拒絕此筆帳款。(目前後端尚未實作退件機制，僅為前端展示)")
 
     def refresh(self):
         """刷新畫面，每次點擊到這個「我的帳單」分頁時都會呼叫"""
         
-        # 1. 載入我們寫好的假資料
-        self.load_mock_data()
+        # 1. 載入真實庫資料
+        self.load_real_data()
         
         # 2. 為了避免重複疊加畫面，畫新介面前先把舊的元件刪掉
         for w in self.dashboard_frame.winfo_children(): w.destroy()
@@ -123,20 +164,26 @@ class PersonalFrame(ctk.CTkFrame):
             
             ctk.CTkLabel(left_info, text=f"發起人: {item['payer']}  |  日期: {item['date']}", 
                          font=ctk.CTkFont(size=12), text_color="gray70").pack(anchor="w")
-            ctk.CTkLabel(left_info, text=f"{item['desc']} (向你請款: ${item['amount']})", 
+            
+            if item.get("type") == "REPAY_REQUEST":
+                title_text = f"{item['desc']} (回報還款: ${item['amount']})"
+            else:
+                title_text = f"{item['desc']} (向你請款: ${item['amount']})"
+                
+            ctk.CTkLabel(left_info, text=title_text, 
                          font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", pady=(5, 0))
             
             # --- 卡片內的右邊區域：確認與拒絕按鈕 ---
             right_btns = ctk.CTkFrame(item_card, fg_color="transparent")
             right_btns.pack(side="right", padx=15, pady=10)
             
-            # 點擊按鈕的假動作 (目前只會在終端機印出字，方便你點擊測試)
+            # 綁定真實的確認與拒絕動作
             btn_ok = ctk.CTkButton(right_btns, text="✅ 確認", width=60, fg_color="#27ae60", hover_color="#2ecc71",
-                                   command=lambda tx=item['id']: print(f"[系統提示] 你點擊了確認帳款: {tx}"))
+                                   command=lambda tx=item['id'], t=item.get("type"), loc=item.get("loc"), p=item["payer"]: self.do_confirm(tx, t, loc, p))
             btn_ok.pack(side="left", padx=5)
             
             btn_no = ctk.CTkButton(right_btns, text="❌ 有誤", width=60, fg_color="#c0392b", hover_color="#e74c3c",
-                                   command=lambda tx=item['id']: print(f"[系統提示] 你拒絕了帳款: {tx}"))
+                                   command=lambda tx=item['id'], t=item.get("type"): self.do_reject(tx, t))
             btn_no.pack(side="left", padx=5)
 
     def build_history(self):

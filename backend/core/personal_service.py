@@ -43,36 +43,76 @@ class PersonalService(BaseService):
             cursor = conn.cursor()
             # 應付
             cursor.execute("""
-                SELECT tp.transaction_id, t.payer_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location
+                SELECT tp.transaction_id, t.payer_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
-                WHERE tp.user_id = ? AND t.payer_id != ? AND tp.status != ? AND t.type = 'EXPENSE'
+                WHERE tp.user_id = ? AND t.payer_id != ? AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
-            payables = [{"tx_id": r[0], "creditor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6]} for r in cursor.fetchall()]
+            payables = [{"tx_id": r[0], "creditor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6], "type": r[7]} for r in cursor.fetchall()]
             
             # 應收
             cursor.execute("""
-                SELECT tp.transaction_id, tp.user_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location
+                SELECT tp.transaction_id, tp.user_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
-                WHERE t.payer_id = ? AND tp.user_id != ? AND tp.status != ? AND t.type = 'EXPENSE'
+                WHERE t.payer_id = ? AND tp.user_id != ? AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
-            receivables = [{"tx_id": r[0], "debtor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6]} for r in cursor.fetchall()]
+            receivables = [{"tx_id": r[0], "debtor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6], "type": r[7]} for r in cursor.fetchall()]
             
         return payables, receivables
 
-    def get_personal_history(self, user_id):
-        """獲取個人所有的支出流水 (含私帳 PRIVATE 與各群組代墊)"""
+    def request_settlement(self, debtor_id, creditor_id, amount, method, tx_ids):
+        """發起一個還款確認請求 (對方會在待辦事項收到)"""
+        from datetime import datetime
+        import random
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # 取得該用戶作為 Payer 的所有交易
+            try:
+                s_id = f"req_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
+                loc = ",".join(tx_ids) # 暫存要結清的 tx_ids
+                desc = f"[結清申請] 透過 {method} 償還"
+                
+                # 建立主交易 (債務人發起)
+                cursor.execute("""
+                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (s_id, "PERSONAL", debtor_id, amount, TransactionStatus.PENDING.name, 'REPAY_REQUEST', desc, loc, datetime.now()))
+                
+                # 參與者是債權人 (待確認)
+                cursor.execute("""
+                    INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status)
+                    VALUES (?, ?, ?, ?)
+                """, (s_id, creditor_id, amount, TransactionStatus.PENDING.name))
+                
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Request settlement Error: {e}")
+                return False
+
+    def reject_transaction(self, user_id, transaction_id):
+        """拒絕一筆尚未確認的帳款或結清申請"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("UPDATE transaction_participants SET status = 'REJECTED' WHERE transaction_id = ? AND user_id = ?", (transaction_id, user_id))
+                conn.commit()
+                return True
+            except:
+                return False
+
+    def get_personal_history(self, user_id):
+        """獲取個人所有的支出流水 (含自己發起與參與的)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("""
-                SELECT transaction_id, group_id, amount, description, timestamp, status
-                FROM transactions 
-                WHERE payer_id = ? AND type = 'EXPENSE'
-                ORDER BY timestamp DESC
-            """, (user_id,))
-            return [{"id": r[0], "group": r[1], "amount": r[2], "desc": r[3], "time": r[4], "status": r[5]} for r in cursor.fetchall()]
+                SELECT DISTINCT t.transaction_id, t.group_id, t.amount, t.description, t.timestamp, t.status, t.payer_id
+                FROM transactions t
+                LEFT JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
+                WHERE (t.payer_id = ? OR tp.user_id = ?) AND t.type = 'EXPENSE'
+                ORDER BY t.timestamp DESC
+            """, (user_id, user_id))
+            return [{"id": r[0], "group": r[1], "amount": r[2], "desc": r[3], "time": r[4], "status": r[5], "payer": r[6]} for r in cursor.fetchall()]
 
     def get_user_summary(self, user_id):
         """獲取使用者與所有人的債務關係簡要總結"""

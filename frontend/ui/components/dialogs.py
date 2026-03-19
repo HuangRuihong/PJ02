@@ -10,17 +10,20 @@ class JoinGroupDialog(ctk.CTkToplevel):
         self.callback = callback
         
         # UI 配置
-        ctk.CTkLabel(self, text="輸入 4 位邀群碼", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
-        self.code_entry = ctk.CTkEntry(self, placeholder_text="A7B2", width=150, height=40)
+        ctk.CTkLabel(self, text="輸入 6 位邀群碼", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
+        self.code_entry = ctk.CTkEntry(self, placeholder_text="A7B2C9", width=150, height=40)
         self.code_entry.pack(pady=10)
         ctk.CTkButton(self, text="加入", command=self.submit).pack(pady=20)
 
     def submit(self):
         """提交邀群碼"""
         code = self.code_entry.get().strip().upper()
-        if len(code) == 4: 
+        if len(code) == 6: 
             self.callback(code)
             self.destroy()
+        else:
+            from tkinter import messagebox
+            messagebox.showerror("格式錯誤", "請輸入完整的 6 位數邀群碼！")
 
 class CreateGroupDialog(ctk.CTkToplevel):
     """建立群組對話框：讓使用者設定群組名稱並生成新群組"""

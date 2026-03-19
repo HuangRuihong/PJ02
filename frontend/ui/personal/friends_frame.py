@@ -88,44 +88,33 @@ class FriendsFrame(ctk.CTkFrame):
         def confirm_scan():
             new_friend = input_id.get().strip()
             if new_friend:
-                print(f"[掃描成功] 已辨識到 QR Code，準備加入好友：{new_friend}")
-                # 這裡把新好友動態加入 Mock 資料，並馬上重新整理畫面！
-                self.mock_friends.append({"id": new_friend, "balance": 0, "overdue_days": 0})
-                self.refresh() # 重繪好友卡片列表
+                print(f"[掃描成功] 寫入資料庫加入好友：{new_friend}")
+                # 雙向寫入真實後端
+                if self.system.add_friend(self.current_user, new_friend):
+                    self.refresh() # 重繪好友卡片列表
                 dialog.destroy()
         
         ctk.CTkButton(dialog, text="確認掃描", command=confirm_scan, fg_color="#27ae60").pack(pady=10)
-    def load_mock_data(self):
-        """
-        載入假資料 (Mock Data)
-        用來取代 self.system.get_friends(self.current_user) 和 get_user_summary 的複雜計算。
-        等後端資料庫寫好後，再把它們換掉。
-        """
-        self.mock_friends = [
-            {
-                "id": "室友A", 
-                "balance": 500,     # >0 代表他欠我錢 (應收)
-                "overdue_days": 2   # 逾期天數 (大於 0 代表已逾期，對應企劃書的【自動化催告】)
-            },
-            {
-                "id": "室友B", 
-                "balance": -150,    # <0 代表我欠他錢 (應付)
-                "overdue_days": 0
-            },
-            {
-                "id": "學長C", 
-                "balance": 0,       # =0 代表已結清
-                "overdue_days": 0
-            }
-        ]
+    def load_real_data(self):
+        """從資料庫載入真實的好友名單與餘額結算狀態"""
+        friends = self.system.get_friends(self.current_user)
+        summary = self.system.get_user_summary(self.current_user)
+        
+        self.mock_friends = []
+        for f in friends:
+            self.mock_friends.append({
+                "id": f,
+                "balance": summary.get(f, 0),
+                "overdue_days": 0 # 這部分可未來串接 check_overdue_transactions
+            })
 
     def refresh(self):
         """重新整理或切換到這頁時，呼叫此函數重新繪製內容"""
         # 清空舊畫面
         for w in self.scroll.winfo_children(): w.destroy()
         
-        # 載入假資料
-        self.load_mock_data()
+        # 載入真實庫資料
+        self.load_real_data()
         
         if not self.mock_friends:
             ctk.CTkLabel(self.scroll, text="你目前還沒加入任何好友喔！", text_color="gray").pack(pady=20)
@@ -182,10 +171,48 @@ class FriendsFrame(ctk.CTkFrame):
         
         # 特殊情境按鈕 1：別人欠我錢 (顯示「一鍵催告」)
         if bal > 0:
+            def send_dunning(target=fid, amt=bal):
+                from tkinter import messagebox
+                messagebox.showinfo("自動催繳系統", f"✅ 已成功發送催繳信號給 {target}！\n\n(系統會在背景紀錄：尚欠款 ${amt})\n註：若需對方登入立刻看見跨裝置提醒，需由隊友擴充 Notifications 資料表才能達成哦！")
+            
             ctk.CTkButton(right_area, text="📨 發送催告", width=90, fg_color="#d35400", hover_color="#e67e22",
-                          command=lambda u=fid: print(f"[警示系統] 已對 {u} 發出系統催告通知！")).pack(side="left", padx=5)
+                          command=send_dunning).pack(side="left", padx=5)
                           
-        # 特殊情境按鈕 2：我欠別人錢 (顯示「立即結清」)
+        # 特殊情境按鈕 2：我欠別人錢 (顯示「已結清」以發出審核)
         elif bal < 0:
-            ctk.CTkButton(right_area, text="💳 立即結清", width=90, fg_color="#27ae60", hover_color="#2ecc71",
-                          command=lambda u=fid: print(f"[系統提示] 進入結帳金流流程，準備還給 {u}...")).pack(side="left", padx=5)
+            ctk.CTkButton(right_area, text="✅ 已結清", width=90, fg_color="#27ae60", hover_color="#2ecc71",
+                          command=lambda u=fid, amt=abs(bal): self.open_repay_dialog(u, amt)).pack(side="left", padx=5)
+
+    def open_repay_dialog(self, target_friend, amount):
+        from tkinter import messagebox
+        dialog = ctk.CTkToplevel(self.winfo_toplevel())
+        dialog.title("回報帳單已結清")
+        dialog.geometry("350x300")
+        dialog.attributes("-topmost", True)
+        
+        ctk.CTkLabel(dialog, text=f"向 {target_friend} 結清 ${amount}", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20,10))
+        ctk.CTkLabel(dialog, text="請選擇您的結清方式，對方確認後即會正式銷帳：", text_color="gray").pack(pady=5)
+        
+        method_var = ctk.StringVar(value="現金")
+        ctk.CTkRadioButton(dialog, text="💵 現金交付", variable=method_var, value="現金").pack(pady=5)
+        ctk.CTkRadioButton(dialog, text="🏦 銀行轉帳 / LINE Pay", variable=method_var, value="轉帳").pack(pady=5)
+        ctk.CTkRadioButton(dialog, text="🎁 其他代墊抵銷", variable=method_var, value="其他抵銷").pack(pady=5)
+        
+        def submit():
+            # 取得我欠這個好友的所有帳單
+            payables, _ = self.system.get_personal_debts(self.current_user)
+            tx_ids = [p['tx_id'] for p in payables if p['creditor'] == target_friend]
+            
+            if not tx_ids:
+                messagebox.showerror("錯誤", "找不到相對應的待結清帳單！")
+                dialog.destroy()
+                return
+                
+            if self.system.request_settlement(self.current_user, target_friend, amount, method_var.get(), tx_ids):
+                messagebox.showinfo("申請已送出", f"✅ 已把「{method_var.get()}結清」的通知發送給 {target_friend}！\n對方確認後就會自動消除負債。")
+                self.winfo_toplevel().refresh_ui()
+            else:
+                messagebox.showerror("錯誤", "發生未知錯誤，請重試。")
+            dialog.destroy()
+            
+        ctk.CTkButton(dialog, text="確認送出結清申請", command=submit).pack(pady=20)

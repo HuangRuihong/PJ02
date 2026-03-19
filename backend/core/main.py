@@ -105,7 +105,7 @@ class DebtSystem(PersonalService, GroupService):
 
     def get_personal_history(self, user_id):
         """獲取個人的所有支出歷史 (Facade)"""
-        return self.personal_service.get_personal_history(user_id)
+        return super().get_personal_history(user_id)
 
     def check_overdue_transactions(self):
         """

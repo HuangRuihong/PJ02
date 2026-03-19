@@ -34,11 +34,8 @@ class CalendarFrame(ctk.CTkFrame):
         self.refresh()
 
     def refresh(self, group_id=None):
-        if not group_id:
-            return
-            
-        selected_date = self.cal.get_date() # MM/DD/YY or similar depending on locale
-        # 轉換為 YYYY-MM-DD
+        # 日曆改為顯示使用者的整體歷史紀錄 (不侷限於單一群組)
+        selected_date = self.cal.get_date()
         try:
             date_obj = datetime.strptime(selected_date, '%m/%d/%y')
             date_str = date_obj.strftime('%Y-%m-%d')
@@ -47,16 +44,16 @@ class CalendarFrame(ctk.CTkFrame):
             
         for w in self.detail_scroll.winfo_children(): w.destroy()
         
-        txs = self.system.get_group_transactions(group_id)
+        txs = self.system.get_personal_history(self.current_user)
         found = False
         for tx in txs:
-            # tx["time"] 通常是 "YYYY-MM-DD HH:MM:SS"
-            if tx["time"].startswith(date_str):
+            if str(tx["time"]).startswith(date_str):
                 found = True
                 f = ctk.CTkFrame(self.detail_scroll); f.pack(fill="x", pady=2, padx=5)
+                payer_text = "你付了" if tx.get('payer') == self.current_user else f"{tx.get('payer')} 付了"
                 ctk.CTkLabel(f, text=f"{tx['desc'] if tx['desc'] else '無描述'}", width=150, anchor="w").pack(side="left", padx=10)
-                ctk.CTkLabel(f, text=f"{tx['payer']} 支付 {tx['amount']}", width=150).pack(side="left", padx=10)
+                ctk.CTkLabel(f, text=f"{payer_text} ${tx['amount']}", width=150).pack(side="left", padx=10)
                 ctk.CTkLabel(f, text=f"{tx['status']}", text_color="#3498db").pack(side="right", padx=10)
         
         if not found:
-            ctk.CTkLabel(self.detail_scroll, text="該日無交易記錄").pack(pady=20)
+            ctk.CTkLabel(self.detail_scroll, text="該日無相關的交易記錄").pack(pady=20)

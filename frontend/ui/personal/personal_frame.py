@@ -17,7 +17,7 @@ class PersonalFrame(ctk.CTkFrame):
         self.main_scroll.pack(fill="both", expand=True, padx=10, pady=10)
         
         # 標題
-        self.title_label = ctk.CTkLabel(self.main_scroll, text=f"👤 {self.current_user} 的個人帳單儀表板", font=ctk.CTkFont(size=24, weight="bold"))
+        self.title_label = ctk.CTkLabel(self.main_scroll, text=f"{self.current_user} 的個人帳單儀表板", font=ctk.CTkFont(size=24, weight="bold"))
         self.title_label.pack(pady=(10, 20), anchor="w", padx=20)
         
         # 準備三個主要區塊的容器
@@ -115,56 +115,80 @@ class PersonalFrame(ctk.CTkFrame):
 
     def build_dashboard(self):
         """畫出第一區塊：視覺化財務儀表板"""
-        ctk.CTkLabel(self.dashboard_frame, text="📊 財務總覽", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(0, 10))
+        ctk.CTkLabel(self.dashboard_frame, text="財務總覽", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(0, 10))
         
+        # 從實體系統獲取真實餘額
+        balances = self.system.get_group_balances("PERSONAL") # 個人私帳餘額
+        # 這裡需要一個能統合個人所有債務的方法，目前暫以個別服務獲取
+        # 為了簡化，我們可以在 DebtSystem 增加一個統合餘額方法
+        # 在此暫時從後端計算所有群組的總合
+        total_receivable = 0
+        total_payable = 0
+        
+        groups = self.system.get_user_groups(self.current_user)
+        for g in groups:
+            gb = self.system.get_group_balances(g['id'])
+            my_bal = gb.get(self.current_user, 0)
+            if my_bal > 0: total_receivable += my_bal
+            else: total_payable += abs(my_bal)
+
+        total_assets = total_receivable - total_payable
+
         # 建立一個橫向排列的容器放三個卡片
         cards_container = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         cards_container.pack(fill="x", pady=5)
-        # 讓三個卡片寬度平均分配
         cards_container.grid_columnconfigure((0, 1, 2), weight=1)
         
         # --- 卡片1：應收 (別人欠我錢) ---
         card1 = ctk.CTkFrame(cards_container, fg_color="#2c3e50")
         card1.grid(row=0, column=0, padx=5, sticky="ew")
         ctk.CTkLabel(card1, text="別人欠我 (應收)", text_color="gray80").pack(pady=(10, 0))
-        ctk.CTkLabel(card1, text=f"+ ${self.mock_dashboard['receivables']}", 
+        ctk.CTkLabel(card1, text=f"+ ${total_receivable}", 
                      font=ctk.CTkFont(size=24, weight="bold"), text_color="#2ecc71").pack(pady=(5, 15))
                      
         # --- 卡片2：應付 (我欠別人錢) ---
         card2 = ctk.CTkFrame(cards_container, fg_color="#2c3e50")
         card2.grid(row=0, column=1, padx=5, sticky="ew")
         ctk.CTkLabel(card2, text="我欠別人 (應付)", text_color="gray80").pack(pady=(10, 0))
-        ctk.CTkLabel(card2, text=f"- ${self.mock_dashboard['payables']}", 
+        ctk.CTkLabel(card2, text=f"- ${total_payable}", 
                      font=ctk.CTkFont(size=24, weight="bold"), text_color="#e74c3c").pack(pady=(5, 15))
 
         # --- 卡片3：個人淨資產 ---
         card3 = ctk.CTkFrame(cards_container, fg_color="#1f538d")
         card3.grid(row=0, column=2, padx=5, sticky="ew")
         ctk.CTkLabel(card3, text="個人淨資產", text_color="gray90").pack(pady=(10, 0))
-        ctk.CTkLabel(card3, text=f"= ${self.mock_dashboard['total_assets']}", 
+        ctk.CTkLabel(card3, text=f"= ${total_assets}", 
                      font=ctk.CTkFont(size=24, weight="bold"), text_color="white").pack(pady=(5, 15))
 
     def build_inbox(self):
         """畫出第二區塊：待確認的通知匣 (Pending Inbox)"""
-        ctk.CTkLabel(self.inbox_frame, text="📥 待辦事項 (需要你驗證的帳款)", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
+        ctk.CTkLabel(self.inbox_frame, text="待辦事項 (需要你驗證的帳款)", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
         
-        if not self.mock_pending_inbox:
-            # 如果沒有待辦事項，顯示灰色提示
+        # 從真實後端獲取待確認交易
+        # 我們掃描所有群組與私帳中，當前使用者狀態為 PENDING 的項目
+        pending_items = []
+        groups = self.system.get_user_groups(self.current_user)
+        target_gids = [g['id'] for g in groups] + ["PERSONAL"]
+        
+        for gid in target_gids:
+            txs = self.system.get_group_transactions(gid)
+            for tx in txs:
+                if self.current_user in tx['pending_confirmations']:
+                    pending_items.append(tx)
+
+        if not pending_items:
             ctk.CTkLabel(self.inbox_frame, text="目前沒有需要驗證的帳款喔！", text_color="gray").pack(pady=10)
             return
             
-        for item in self.mock_pending_inbox:
-            # 設計一個帶有橘色邊框的代辦事項卡片
+        for item in pending_items:
             item_card = ctk.CTkFrame(self.inbox_frame, border_width=1, border_color="#e67e22")
             item_card.pack(fill="x", pady=5)
             
-            # --- 卡片內的左邊區域：文字描述 ---
             left_info = ctk.CTkFrame(item_card, fg_color="transparent")
             left_info.pack(side="left", fill="both", expand=True, padx=15, pady=10)
             
-            ctk.CTkLabel(left_info, text=f"發起人: {item['payer']}  |  日期: {item['date']}", 
+            ctk.CTkLabel(left_info, text=f"發起人: {item['payer']}  |  日期: {item['time']}", 
                          font=ctk.CTkFont(size=12), text_color="gray70").pack(anchor="w")
-            
             if item.get("type") == "REPAY_REQUEST":
                 title_text = f"{item['desc']} (回報還款: ${item['amount']})"
             else:
@@ -173,7 +197,6 @@ class PersonalFrame(ctk.CTkFrame):
             ctk.CTkLabel(left_info, text=title_text, 
                          font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", pady=(5, 0))
             
-            # --- 卡片內的右邊區域：確認與拒絕按鈕 ---
             right_btns = ctk.CTkFrame(item_card, fg_color="transparent")
             right_btns.pack(side="right", padx=15, pady=10)
             
@@ -188,19 +211,29 @@ class PersonalFrame(ctk.CTkFrame):
 
     def build_history(self):
         """畫出第三區塊：歷史紀錄清單"""
-        ctk.CTkLabel(self.history_frame, text="📜 最近的帳務紀錄", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
+        ctk.CTkLabel(self.history_frame, text="最近的帳務紀錄", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
         
-        for item in self.mock_history:
+        # 獲取真實歷史紀錄 (包含個人私帳)
+        history = self.system.get_personal_history(self.current_user)
+        if not history:
+            ctk.CTkLabel(self.history_frame, text="尚無任何歷史紀錄。", text_color="gray").pack(pady=10)
+            return
+
+        for item in history[:20]: # 僅顯示前 20 筆
             hf = ctk.CTkFrame(self.history_frame, fg_color="transparent")
             hf.pack(fill="x", pady=2)
             
             # 左側：時間與描述
-            ctk.CTkLabel(hf, text=f"{item['date']}").pack(side="left", padx=10)
-            ctk.CTkLabel(hf, text=f"{item['desc']}", width=150, anchor="w").pack(side="left", padx=10)
+            date_str = item['timestamp'][:10] if isinstance(item['timestamp'], str) else item['timestamp'].strftime('%Y-%m-%d')
+            ctk.CTkLabel(hf, text=date_str).pack(side="left", padx=10)
+            ctk.CTkLabel(hf, text=f"{item['description'] or '一般支出'}", width=150, anchor="w").pack(side="left", padx=10)
             
-            # 右側：錢的顏色。如果是「別人的帳，我必須付錢」就標紅，反之標綠。
-            color = "#e74c3c" if item['type'] == "別人付錢" else "#2ecc71"
-            prefix = "-" if item['type'] == "別人付錢" else "+"
+            # 右側：金額。如果是「我付錢」就標綠，如果是「我被分帳」就標紅。
+            # 這裡的邏輯需要配合 get_personal_history 的回傳值
+            is_payer = (item['payer_id'] == self.current_user)
+            color = "#2ecc71" if is_payer else "#e74c3c"
+            prefix = "+" if is_payer else "-"
+            label_text = "我付錢" if is_payer else "被分帳"
             
-            ctk.CTkLabel(hf, text=item['type'], text_color="gray60", width=80, anchor="e").pack(side="right", padx=10)
+            ctk.CTkLabel(hf, text=label_text, text_color="gray60", width=80, anchor="e").pack(side="right", padx=10)
             ctk.CTkLabel(hf, text=f"{prefix}${item['amount']}", text_color=color, font=ctk.CTkFont(weight="bold")).pack(side="right", padx=10)

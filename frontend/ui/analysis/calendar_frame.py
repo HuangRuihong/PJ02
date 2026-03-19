@@ -13,7 +13,7 @@ class CalendarFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
         
-        ctk.CTkLabel(self, text="📅 帳務日曆", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, pady=20)
+        ctk.CTkLabel(self, text="帳務日曆", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, pady=20)
         
         # 日曆元件
         self.cal = Calendar(self, selectmode='day', 

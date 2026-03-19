@@ -102,9 +102,10 @@ class PersonalService(BaseService):
                 return False
 
     def get_personal_history(self, user_id):
-        """獲取個人所有的支出流水 (含自己發起與參與的)"""
+        """獲取個人的所有支出歷史 (含各群組代墊)"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            # 取得該用戶作為 Payer 或是參與者的所有交易
             cursor.execute("""
                 SELECT DISTINCT t.transaction_id, t.group_id, t.amount, t.description, t.timestamp, t.status, t.payer_id
                 FROM transactions t
@@ -112,7 +113,7 @@ class PersonalService(BaseService):
                 WHERE (t.payer_id = ? OR tp.user_id = ?) AND t.type = 'EXPENSE'
                 ORDER BY t.timestamp DESC
             """, (user_id, user_id))
-            return [{"id": r[0], "group": r[1], "amount": r[2], "desc": r[3], "time": r[4], "status": r[5], "payer": r[6]} for r in cursor.fetchall()]
+            return [{"id": r[0], "group": r[1], "amount": r[2], "description": r[3], "timestamp": r[4], "status": r[5], "payer_id": r[6]} for r in cursor.fetchall()]
 
     def get_user_summary(self, user_id):
         """獲取使用者與所有人的債務關係簡要總結"""

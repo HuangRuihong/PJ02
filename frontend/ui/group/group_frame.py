@@ -24,14 +24,17 @@ class GroupFrame(ctk.CTkFrame):
         self.add_btn = ctk.CTkButton(self.header, text="+ 記一筆", command=self.open_add_tx)
         self.add_btn.grid(row=0, column=1, sticky="ew", padx=4)
         
-        self.refresh_btn = ctk.CTkButton(self.header, text="🔄 刷新", command=self.handle_refresh, fg_color="#3498db", hover_color="#2980b9")
+        self.refresh_btn = ctk.CTkButton(self.header, text="刷新", command=self.handle_refresh, fg_color="#3498db", hover_color="#2980b9")
         self.refresh_btn.grid(row=0, column=2, sticky="ew", padx=4)
         
-        self.settle_btn = ctk.CTkButton(self.header, text="💰 一鍵結算", command=self.handle_settle, fg_color="#2ecc71", hover_color="#27ae60")
+        self.settle_btn = ctk.CTkButton(self.header, text="一鍵結算", command=self.handle_settle, fg_color="#2ecc71", hover_color="#27ae60")
         self.settle_btn.grid(row=0, column=3, sticky="ew", padx=4)
         
-        self.delete_btn = ctk.CTkButton(self.header, text="🗑️ 刪除群組", command=self.handle_delete, fg_color="#e74c3c", hover_color="#c0392b")
-        self.delete_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        self.export_btn = ctk.CTkButton(self.header, text="匯出帳單", command=self.handle_export_bill, fg_color="#f39c12", hover_color="#e67e22")
+        self.export_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        
+        self.delete_btn = ctk.CTkButton(self.header, text="刪除群組", command=self.handle_delete, fg_color="#e74c3c", hover_color="#c0392b")
+        self.delete_btn.grid(row=0, column=5, sticky="ew", padx=4)
 
         # 成員名單顯示區
         self.members_info = ctk.CTkFrame(self, fg_color="transparent")
@@ -47,7 +50,7 @@ class GroupFrame(ctk.CTkFrame):
         
         # 處理無群組顯示邏輯
         if not gid:
-            self.info_label.configure(text="❌ 目前沒有任何群組")
+            self.info_label.configure(text="目前沒有任何群組")
             self.members_info.pack_forget()
             self.settle_btn.grid_remove()
             self.delete_btn.grid_remove()
@@ -57,7 +60,7 @@ class GroupFrame(ctk.CTkFrame):
             return
         
         # 有群組時恢復顯示按鈕與資訊
-        self.info_label.configure(text=f"👥 {gname} (代碼: {gcode})")
+        self.info_label.configure(text=f"{gname} (代碼: {gcode})")
         
         # 為確保佈局順序正確 (標題 -> 成員 -> 活動捲動區)，先暫時移開捲動區再重新放入
         self.scroll.pack_forget()
@@ -68,7 +71,8 @@ class GroupFrame(ctk.CTkFrame):
         self.add_btn.grid(row=0, column=1, sticky="ew", padx=4)
         self.refresh_btn.grid(row=0, column=2, sticky="ew", padx=4)
         self.settle_btn.grid(row=0, column=3, sticky="ew", padx=4)
-        self.delete_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        self.export_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        self.delete_btn.grid(row=0, column=5, sticky="ew", padx=4)
         
         # 載入並顯示成員名單
         members = self.system.get_group_members(gid)
@@ -80,7 +84,7 @@ class GroupFrame(ctk.CTkFrame):
         for tx in txs:
             f = ctk.CTkFrame(self.scroll); f.pack(fill="x", pady=5)
             # 根據交易類型顯示不同的前綴文字
-            prefix = "💰 償還了" if tx['type'] == 'SETTLEMENT' else "💸 支出"
+            prefix = "償還了" if tx['type'] == 'SETTLEMENT' else "支出"
             l = ctk.CTkLabel(f, text=f"{tx['payer']} {prefix} {tx['amount']}")
             l.pack(side="left", padx=10)
             
@@ -90,6 +94,11 @@ class GroupFrame(ctk.CTkFrame):
             
             if current_user in tx['pending_confirmations']:
                 ctk.CTkButton(f, text="確認", width=60, command=lambda tid=tx['id']: self.winfo_toplevel().confirm_tx(tid)).pack(side="right", padx=5)
+            
+            # 只有付款人可以看到「催帳」按鈕來提醒他人
+            if current_user == tx['payer'] and tx['pending_confirmations']:
+                ctk.CTkButton(f, text="催帳", width=60, fg_color="#d35400", hover_color="#a04000",
+                             command=lambda tid=tx['id']: self.handle_notify(tid)).pack(side="right", padx=5)
 
     def open_add_tx(self):
         self.winfo_toplevel().open_add_tx()
@@ -108,6 +117,30 @@ class GroupFrame(ctk.CTkFrame):
                 current_user=self.current_user,
                 refresh_cb=self.winfo_toplevel().refresh_ui
             )
+
+    def handle_notify(self, tid):
+        """處理催帳按鈕：顯示通知文字並提供複製"""
+        from tkinter import messagebox
+        import pyperclip
+        msg = self.system.get_notification_message(tid)
+        if messagebox.askyesno("生成催帳訊息", f"已生成針對該筆交易的提醒文字：\n\n{msg}\n\n是否將此文字複製到剪貼簿？"):
+            try:
+                pyperclip.copy(msg)
+                messagebox.showinfo("成功", "催帳訊息已複製到剪貼簿，您可以直接貼上至 Line 或其他通訊軟體。")
+            except Exception:
+                messagebox.showerror("錯誤", "無法存取剪貼簿。")
+
+    def handle_export_bill(self):
+        """匯出群組帳單摘要"""
+        from tkinter import messagebox
+        import pyperclip
+        summary = self.system.generate_group_bill_summary(self.gid)
+        if messagebox.askyesno("匯出帳單摘要", f"即將生成的帳單內容如下：\n\n{summary}\n\n是否將此摘要複製到剪貼簿？"):
+            try:
+                pyperclip.copy(summary)
+                messagebox.showinfo("成功", "帳單摘要已複製到剪貼簿。")
+            except Exception:
+                messagebox.showerror("錯誤", "無法存取剪貼簿。")
 
     def handle_settle(self):
         """處理結算按鈕點擊：詢問模式"""
@@ -132,7 +165,7 @@ class GroupFrame(ctk.CTkFrame):
         result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']}" for p in plan])
         messagebox.showinfo("結算與還款落實", 
             f"已使用「{mode}」模式完成計算，建議還款方式如下：\n\n{result_str}\n\n"
-            "✅ 上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。")
+            "上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。")
         self.winfo_toplevel().refresh_ui()
 
     def handle_delete(self):

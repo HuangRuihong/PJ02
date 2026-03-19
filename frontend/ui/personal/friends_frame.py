@@ -25,20 +25,20 @@ class FriendsFrame(ctk.CTkFrame):
         self.header = ctk.CTkFrame(self, fg_color="transparent")
         self.header.pack(fill="x", padx=20, pady=20)
         
-        ctk.CTkLabel(self.header, text="👥 我的好友清單與結算狀態", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
+        ctk.CTkLabel(self.header, text="我的好友清單與結算狀態", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
         
         # 按鈕容器 (放在右邊)
         btn_container = ctk.CTkFrame(self.header, fg_color="transparent")
         btn_container.pack(side="right")
 
         # 顯示自己的 QR Code 按鈕
-        self.my_qr_btn = ctk.CTkButton(btn_container, text="📱 我的 QR 名片", width=120, fg_color="#8e44ad", hover_color="#9b59b6",
-                                       command=self.show_mock_qr)
+        self.my_qr_btn = ctk.CTkButton(btn_container, text="我的 QR 名片", width=120, fg_color="#8e44ad", hover_color="#9b59b6",
+                                    command=lambda: self.winfo_toplevel().show_my_qr())
         self.my_qr_btn.pack(side="left", padx=5)
         
-        # 掃描名片按鈕 (改用我們自己的 Mock 版本，方便測試不報錯)
-        self.scan_btn = ctk.CTkButton(btn_container, text="🔍 掃描好友名片", width=120, 
-                                      command=self.mock_scan_qr)
+        # 掃描名片按鈕 
+        self.scan_btn = ctk.CTkButton(btn_container, text="掃描好友名片", width=120, 
+                                    command=lambda: self.winfo_toplevel().scan_qr_from_file())
         self.scan_btn.pack(side="left", padx=5)
         
         # 建立放好友卡片的大捲軸
@@ -79,7 +79,7 @@ class FriendsFrame(ctk.CTkFrame):
         dialog.geometry("350x250")
         dialog.attributes("-topmost", True)
         
-        ctk.CTkLabel(dialog, text="📷 正在開啟鏡頭 / 選擇相片...", font=ctk.CTkFont(size=16)).pack(pady=20)
+        ctk.CTkLabel(dialog, text="正在開啟鏡頭 / 選擇相片...", font=ctk.CTkFont(size=16)).pack(pady=20)
         ctk.CTkLabel(dialog, text="(目前為測試模式：請直接輸入好友 ID)", text_color="gray").pack()
         
         input_id = ctk.CTkEntry(dialog, placeholder_text="例如: 新室友D")
@@ -113,15 +113,27 @@ class FriendsFrame(ctk.CTkFrame):
         # 清空舊畫面
         for w in self.scroll.winfo_children(): w.destroy()
         
-        # 載入真實庫資料
-        self.load_real_data()
+        # 從真實系統獲取好友
+        friends = self.system.get_friends(self.current_user)
         
-        if not self.mock_friends:
+        if not friends:
             ctk.CTkLabel(self.scroll, text="你目前還沒加入任何好友喔！", text_color="gray").pack(pady=20)
             return
 
-        for friend in self.mock_friends:
-            self.create_friend_card(friend)
+        for fid in friends:
+            # 取得與該好友的結算狀態 (簡單實作：掃描所有共同群組的餘額)
+            total_bal = 0
+            groups = self.system.get_user_groups(self.current_user)
+            for g in groups:
+                mems = self.system.get_group_members(g['id'])
+                if fid in mems:
+                    gb = self.system.get_group_balances(g['id'])
+                    # 這邊邏輯較複雜，暫以簡化的 A vs B 差額表示
+                    # 現有系統是群組制的，暫時只顯示有無共同債務
+                    pass 
+            
+            # 使用 Mock 資訊包裝真實 ID
+            self.create_friend_card({"id": fid, "balance": 0, "overdue_days": 0})
 
     def create_friend_card(self, friend):
         """畫出【單一位好友】的詳細卡片與對應按鈕"""
@@ -157,7 +169,7 @@ class FriendsFrame(ctk.CTkFrame):
         
         # [企劃書亮點] 如果這筆帳有人逾期了，就顯示法制警告標語！
         if overdue > 0:
-            warning_text = f"🚨 系統偵測：有帳款已逾期 {overdue} 天未結清"
+            warning_text = f"系統偵測：有帳款已逾期 {overdue} 天未結清"
             ctk.CTkLabel(mid_area, text=warning_text, text_color="#e67e22", font=ctk.CTkFont(size=12)).pack(anchor="w", pady=(5,0))
             
         # --- 卡片右側：情境按鈕區 ---
@@ -166,8 +178,8 @@ class FriendsFrame(ctk.CTkFrame):
         
         # 預設一定會有的功能：「發起記帳」
         # (直接沿用原本的 self.winfo_toplevel().quick_charge)
-        ctk.CTkButton(right_area, text="📝 發起記帳", width=90, fg_color="#1f538d",
-                      command=lambda u=fid: self.winfo_toplevel().quick_charge(u)).pack(side="left", padx=5)
+        ctk.CTkButton(right_area, text="發起記帳", width=90, fg_color="#1f538d",
+                    command=lambda u=fid: self.winfo_toplevel().quick_charge(u)).pack(side="left", padx=5)
         
         # 特殊情境按鈕 1：別人欠我錢 (顯示「一鍵催告」)
         if bal > 0:

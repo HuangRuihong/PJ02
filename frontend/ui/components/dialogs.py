@@ -64,9 +64,9 @@ class AddTransactionDialog(ctk.CTkToplevel):
         
         # 新增模式切換：平均 vs 自訂
         self.mode_var = ctk.StringVar(value="equal")
-        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom", "private"], 
+        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom", "contribution", "private"], 
                                                 command=self.toggle_mode, variable=self.mode_var)
-        self.mode_switch.configure(values=["平均分帳", "手動自訂", "個人私帳"])
+        self.mode_switch.configure(values=["平均分帳", "手動自訂", "預交公費", "個人私帳"])
         self.mode_switch.pack(pady=10)
 
         self.scroll = ctk.CTkScrollableFrame(self, label_text="分錢的人"); self.scroll.pack(pady=10, padx=20, fill="both", expand=True)
@@ -107,6 +107,17 @@ class AddTransactionDialog(ctk.CTkToplevel):
                     ent.configure(state="readonly")
                 return
 
+            if mode == "contribution":
+                # 公費預交：指定一位保管人 (Holder)，預設勾選除自己以外的第一人
+                self.scroll.configure(label_text="誰負責保管這筆錢？")
+                for m, v in self.check_vars.items():
+                    ent = self.split_entries[m]
+                    ent.configure(state="normal"); ent.delete(0, "end"); ent.insert(0, "0")
+                    ent.configure(state="readonly")
+                return
+            
+            self.scroll.configure(label_text="分前的人")
+
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
             if mode == "equal":
                 # 平均模式：禁止手動輸入，自動計算且處理餘數
@@ -139,6 +150,21 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 # 私帳模式：強制僅付款人，並標記 target_gid 為 PERSONAL
                 target_user = getattr(self.master, "current_user", "")
                 self.callback(total, [target_user], {target_user: total}, self.desc_entry.get(), self.loc_entry.get(), is_private=True)
+                self.destroy()
+                return
+
+            if mode == "contribution":
+                # 公費預交：建立一筆特別交易，類型為 CONTRIBUTION
+                # 必須選中一位保管人
+                sel = [m for m, v in self.check_vars.items() if v.get() == 1]
+                if len(sel) != 1:
+                    from tkinter import messagebox
+                    messagebox.showerror("選擇錯誤", "「預交公費」模式請僅選擇一位成員作為『保管人』。")
+                    return
+                
+                holder = sel[0]
+                # Payer: 我, Participants: [保管人], Amount: 全部由保管人「欠」我
+                self.callback(total, [holder], {holder: total}, self.desc_entry.get(), self.loc_entry.get(), tx_type="CONTRIBUTION")
                 self.destroy()
                 return
 
@@ -205,9 +231,9 @@ class TransactionDetailDialog(ctk.CTkToplevel):
         info_frame.pack(fill="x", padx=30, pady=10)
         
         loc = self.details['loc'] or "未提供地點"
-        ctk.CTkLabel(info_frame, text=f"📍 地點: {loc}").pack(anchor="w", padx=20, pady=5)
-        ctk.CTkLabel(info_frame, text=f"📅 時間: {self.details['time']}").pack(anchor="w", padx=20, pady=5)
-        ctk.CTkLabel(info_frame, text=f"👤 付款人: {self.details['payer']}").pack(anchor="w", padx=20, pady=5)
+        ctk.CTkLabel(info_frame, text=f" 地點: {loc}").pack(anchor="w", padx=20, pady=5)
+        ctk.CTkLabel(info_frame, text=f" 時間: {self.details['time']}").pack(anchor="w", padx=20, pady=5)
+        ctk.CTkLabel(info_frame, text=f" 付款人: {self.details['payer']}").pack(anchor="w", padx=20, pady=5)
         
         # 參與者清單區
         ctk.CTkLabel(self, text="分帳明細", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=40, pady=(20, 5))
@@ -232,7 +258,7 @@ class TransactionDetailDialog(ctk.CTkToplevel):
                          p['amount'] > 0)
             if is_debtor and self.system:
                 ctk.CTkButton(
-                    pf, text="💰 還款", width=80, height=26,
+                    pf, text="還款", width=80, height=26,
                     fg_color="#e67e22", hover_color="#ca6f1e",
                     command=lambda uid=p['user_id'], amt=p['amount']: self.do_repay(uid, amt)
                 ).pack(side="right", padx=5)

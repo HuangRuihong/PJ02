@@ -11,3 +11,4 @@ class TransactionType(enum.Enum):
     """交易類型枚舉：區分一般消費與還款行為"""
     EXPENSE = "消費"        # 一般購物、聚餐支出
     SETTLEMENT = "還款"     # 債務結清、轉帳還款
+    CONTRIBUTION = "公費預交" # 成員預先存入的公費 (Mode A)

@@ -117,7 +117,7 @@ class AccountingGUI(ctk.CTk):
         # 過濾出與當前使用者相關的 (或是全部提醒)
         my_overdue = [o for o in overdue if o["user"] == self.current_user]
         if my_overdue:
-            msg = "⚠️ 逾期未處理提醒 ⚠️\n\n"
+            msg = "逾期未處理提醒\n\n"
             for o in my_overdue[:5]: # 最多顯示 5 筆
                 msg += f"- {o['desc']} (金額: {o['amount']}, 已逾期 {o['days']} 天)\n"
             if len(my_overdue) > 5: msg += "...等更多項目\n"
@@ -130,11 +130,11 @@ class AccountingGUI(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self.main_container, width=200, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         
-        ctk.CTkLabel(self.sidebar, text=f"👤 {self.current_user}", font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
+        ctk.CTkLabel(self.sidebar, text=f"使用者: {self.current_user}", font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
         ctk.CTkButton(self.sidebar, text="登出系統", command=self.logout, fg_color="transparent").pack(pady=(0, 10))
         
-        # 全局快速記帳按鈕 (NEW)
-        self.quick_add_btn = ctk.CTkButton(self.sidebar, text="📝 快速記帳", 
+        # 全局快速記帳按鈕
+        self.quick_add_btn = ctk.CTkButton(self.sidebar, text="快速記帳", 
                                           command=self.open_global_add_tx,
                                           fg_color="#1f538d", hover_color="#14375e", height=40)
         self.quick_add_btn.pack(pady=10, padx=10, fill="x")
@@ -232,7 +232,7 @@ class AccountingGUI(ctk.CTk):
         mems = self.system.get_group_members(self.current_group_id)
         AddTransactionDialog(self, mems, self.add_tx_cb, pre_selected=force_participant)
 
-    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False):
+    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE"):
         """交易對話框提交後的回調"""
         tid = f"tx_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
@@ -242,11 +242,11 @@ class AccountingGUI(ctk.CTk):
         # 安全檢查：若非私帳且無當前群組，則轉為私帳 (防止邊際案例)
         if not target_gid: target_gid = "PERSONAL"
         
-        if self.system.propose_transaction(tid, self.current_user, amt, sel, target_gid, custom, description=desc, location=loc): 
+        if self.system.propose_transaction(tid, self.current_user, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc): 
             self.refresh_ui()
 
     def confirm_tx(self, tid): 
-        """確認交易"""
+        """確認交易狀態"""
         self.system.confirm_transaction(self.current_user, tid)
         self.refresh_ui()
 
@@ -263,11 +263,21 @@ class AccountingGUI(ctk.CTk):
 
     def scan_qr_from_file(self):
         """掃描本地圖片文件以加入好友"""
-        if not SCAN_SUPPORT: return
+        if not SCAN_SUPPORT: 
+            mbox.showwarning("環境限制", "您的電腦環境缺少 pyzbar 或 opencv 庫，暫無法使用圖片掃描功能。\n請在終端機執行 `pip install pyzbar opencv-python` 以啟用此功能。")
+            return
         p = fd.askopenfilename()
         if p:
             objs = decode(cv2.imread(p))
-            if objs and self.system.add_friend(self.current_user, objs[0].data.decode('utf-8')): 
+            if objs:
+                fid = objs[0].data.decode('utf-8')
+                if self.system.add_friend(self.current_user, fid):
+                    mbox.showinfo("成功", f"掃描成功！已加入好友：{fid}")
+                    self.refresh_ui()
+                else: 
+                    mbox.showerror("失敗", "無法加入該好友（可能已是好友）。")
+            else:
+                mbox.showerror("辨識失敗", "無法在該圖片中找到有效的 QR Code。")
                 self.refresh_ui()
 
     def quick_charge(self, fid): 

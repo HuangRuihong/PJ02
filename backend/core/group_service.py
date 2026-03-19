@@ -329,3 +329,69 @@ class GroupService(BaseService):
                 print(f"Repay Transaction Error: {e}")
                 conn.rollback()
                 return False
+
+    def generate_group_bill_summary(self, group_id):
+        """生成群組當前債務結算的動態摘要文字"""
+        balances = self.get_group_balances(group_id)
+        if not balances:
+            return "目前帳目已全部結清，暫無待處理債務。"
+
+        summary = f"【群組帳單摘要】\n群組 ID: {group_id}\n生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        summary += "-" * 30 + "\n"
+        
+        # 應收與應付明細
+        creditors = {u: amt for u, amt in balances.items() if amt > 0}
+        debtors = {u: abs(amt) for u, amt in balances.items() if amt < 0}
+        
+        if creditors:
+            summary += " [應收款項]\n"
+            for u, amt in creditors.items():
+                summary += f"  · {u}: +${amt}\n"
+        
+        if debtors:
+            summary += "\n [待付款項]\n"
+            for u, amt in debtors.items():
+                summary += f"  · {u}: -${amt}\n"
+        
+        # 建議結算路徑 (使用簡易簡化模式)
+        summary += "\n [建議還款路徑]\n"
+        plan = []
+        d_list = sorted(debtors.items(), key=lambda x: x[1], reverse=True)
+        c_list = sorted(creditors.items(), key=lambda x: x[1], reverse=True)
+        
+        d_idx, c_idx = 0, 0
+        temp_d = [list(x) for x in d_list]
+        temp_c = [list(x) for x in c_list]
+        
+        while d_idx < len(temp_d) and c_idx < len(temp_c):
+            pay_amt = min(temp_d[d_idx][1], temp_c[c_idx][1])
+            if pay_amt > 0:
+                summary += f"  · {temp_d[d_idx][0]} -> 轉帳 ${pay_amt} 給 {temp_c[c_idx][0]}\n"
+            temp_d[d_idx][1] -= pay_amt
+            temp_c[c_idx][1] -= pay_amt
+            if temp_d[d_idx][1] == 0: d_idx += 1
+            if temp_c[c_idx][1] == 0: c_idx += 1
+            
+        summary += "\n請各位成員確認後，於系統內進行「確認」與「還款」操作。"
+        return summary
+
+    def get_notification_message(self, tx_id):
+        """生成針對特定交易的催帳/通知文字"""
+        details = self.get_transaction_details(tx_id)
+        if not details: return "交易資訊不存在。"
+        
+        msg = f"【mysalf 帳務提醒】\n"
+        msg += f"項目：{details['desc'] or '未命名支出'}\n"
+        msg += f"金額：${details['amount']}\n"
+        msg += f"付款人：{details['payer']}\n"
+        msg += f"日期：{details['time']}\n"
+        msg += "-" * 20 + "\n"
+        
+        pending = [p for p in details['participants'] if p['status'] == TransactionStatus.PENDING.name]
+        if pending:
+            names = ", ".join([p['user_id'] for p in pending])
+            msg += f" 請以下成員盡速確認或支付：\n{names}\n"
+        else:
+            msg += " 此筆交易所有參與者已確認。"
+            
+        return msg

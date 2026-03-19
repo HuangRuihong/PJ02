@@ -56,7 +56,7 @@ class DebtSystem(PersonalService, GroupService):
                 cursor.execute("""
                     INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (s_id, "g1", debtor_id, total_settled, TransactionStatus.SETTLED.name, TransactionType.SETTLEMENT.name, now))
+                """, (s_id, "PERSONAL", debtor_id, total_settled, TransactionStatus.SETTLED.name, TransactionType.SETTLEMENT.name, now))
                 
                 cursor.execute("""
                     INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)

@@ -88,8 +88,9 @@ class GroupService(BaseService):
                 "remaining": budget - spent
             }
 
-    def propose_transaction(self, transaction_id, payer_id, amount_float, participants, group_id, custom_splits=None, tx_type=TransactionType.EXPENSE.name, description="", location=""):
-        """發起一筆新交易並計算分帳"""
+    def propose_transaction(self, transaction_id, payer_id, amount_float, participants, group_id, custom_splits=None, tx_type=TransactionType.EXPENSE.name, description="", location="", timestamp=None):
+        """發起一筆新交易並計算分帳 (支援自定義時間)"""
+        actual_ts = timestamp if timestamp else datetime.now()
         amount_twd = int(round(amount_float))
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -108,7 +109,7 @@ class GroupService(BaseService):
                 cursor.execute("""
                     INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (transaction_id, group_id, payer_id, amount_twd, TransactionStatus.PENDING.name, tx_type, description, location, datetime.now()))
+                """, (transaction_id, group_id, payer_id, amount_twd, TransactionStatus.PENDING.name, tx_type, description, location, actual_ts))
                 
                 for uid, owed in splits.items():
                     status = TransactionStatus.CONFIRMED.name if uid == payer_id else TransactionStatus.PENDING.name
@@ -283,6 +284,22 @@ class GroupService(BaseService):
                 return True
             except Exception as e:
                 print(f"Delete Group Error: {e}")
+                conn.rollback()
+                return False
+
+    def delete_transaction(self, transaction_id):
+        """刪除特定交易及其所有關聯的參與者紀錄"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                # 1. 刪除參與者紀錄
+                cursor.execute("DELETE FROM transaction_participants WHERE transaction_id = ?", (transaction_id,))
+                # 2. 刪除交易主表
+                cursor.execute("DELETE FROM transactions WHERE transaction_id = ?", (transaction_id,))
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Delete Transaction Error: {e}")
                 conn.rollback()
                 return False
 

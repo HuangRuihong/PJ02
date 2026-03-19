@@ -4,17 +4,17 @@ __pycache__/
 *$py.class
 
 # SQLite databases (Keep production data out of Git to avoid merge conflicts)
-data/accounting.db
+backend/data/accounting.db
 *.db
 *.db-journal
 *.db-shm
 *.db-wal
 
 # QR code images
-data/qr_*.png
+backend/data/qr_*.png
 
 # Local configurations
-data/config.json
+backend/data/config.json
 
 # Environments
 .venv/

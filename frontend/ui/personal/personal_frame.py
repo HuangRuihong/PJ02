@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ..components.dialogs import TransactionDetailDialog
 
 class PersonalFrame(ctk.CTkFrame):
     def __init__(self, parent, system, current_user):
@@ -99,16 +100,11 @@ class PersonalFrame(ctk.CTkFrame):
 
     def refresh(self):
         """刷新畫面，每次點擊到這個「我的帳單」分頁時都會呼叫"""
-        
-        # 1. 載入真實庫資料
-        self.load_real_data()
-        
-        # 2. 為了避免重複疊加畫面，畫新介面前先把舊的元件刪掉
+        # 清除舊元件後重新繪製各區塊
         for w in self.dashboard_frame.winfo_children(): w.destroy()
         for w in self.inbox_frame.winfo_children(): w.destroy()
         for w in self.history_frame.winfo_children(): w.destroy()
         
-        # 3. 呼叫三個方法來把自己負責的區塊畫上去
         self.build_dashboard()
         self.build_inbox()
         self.build_history()
@@ -224,7 +220,15 @@ class PersonalFrame(ctk.CTkFrame):
             hf.pack(fill="x", pady=2)
             
             # 左側：時間與描述
-            date_str = item['timestamp'][:10] if isinstance(item['timestamp'], str) else item['timestamp'].strftime('%Y-%m-%d')
+            # 左側：時間與描述 (改為 YYYY/MM/DD 顯示)
+            if isinstance(item['timestamp'], str):
+                try:
+                    dt = datetime.strptime(item['timestamp'][:10], '%Y-%m-%d')
+                    date_str = dt.strftime('%Y/%m/%d')
+                except:
+                    date_str = item['timestamp'][:10].replace('-', '/')
+            else:
+                date_str = item['timestamp'].strftime('%Y/%m/%d')
             ctk.CTkLabel(hf, text=date_str).pack(side="left", padx=10)
             ctk.CTkLabel(hf, text=f"{item['description'] or '一般支出'}", width=150, anchor="w").pack(side="left", padx=10)
             
@@ -235,5 +239,23 @@ class PersonalFrame(ctk.CTkFrame):
             prefix = "+" if is_payer else "-"
             label_text = "我付錢" if is_payer else "被分帳"
             
-            ctk.CTkLabel(hf, text=label_text, text_color="gray60", width=80, anchor="e").pack(side="right", padx=10)
             ctk.CTkLabel(hf, text=f"{prefix}${item['amount']}", text_color=color, font=ctk.CTkFont(weight="bold")).pack(side="right", padx=10)
+            
+            # 使整列可點擊 (透過透明按鈕或綁定)
+            click_btn = ctk.CTkButton(hf, text="", fg_color="transparent", hover_color="#2c2c2c", 
+                                     command=lambda tid=item['id']: self.show_detail(tid))
+            click_btn.place(relx=0, rely=0, relwidth=1, relheight=1)
+            # 提升 Label 層級使其顯示在按鈕上 (tkinter 特性)
+            for child in hf.winfo_children():
+                if child != click_btn: child.lift()
+
+    def show_detail(self, tid):
+        """顯示交易詳情彈窗"""
+        details = self.system.get_transaction_details(tid)
+        if details:
+            TransactionDetailDialog(
+                self.winfo_toplevel(), details,
+                system=self.system,
+                current_user=self.current_user,
+                refresh_cb=self.winfo_toplevel().refresh_ui
+            )

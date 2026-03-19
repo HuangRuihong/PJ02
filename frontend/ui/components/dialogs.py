@@ -1,5 +1,7 @@
 import customtkinter as ctk
 from PIL import Image
+from datetime import datetime
+from tkcalendar import DateEntry
 
 class JoinGroupDialog(ctk.CTkToplevel):
     """加入群組對話框：讓使用者輸入 4 位邀群碼以加入特定群組"""
@@ -48,181 +50,285 @@ class CreateGroupDialog(ctk.CTkToplevel):
 
 class AddTransactionDialog(ctk.CTkToplevel):
     """新增交易對話框：處理消費金額錄入、參與者選擇與自動分帳邏輯"""
+
+    # 使用中文字串作為內部模式識別 key，避免 CTkSegmentedButton 的 variable 與 values 不一致問題
+    MODE_EQUAL        = "平均分帳"
+    MODE_CUSTOM       = "手動自訂"
+    MODE_CONTRIBUTION = "預交公費"
+    MODE_PRIVATE      = "個人私帳"
+
     def __init__(self, parent, members, callback, pre_selected=None):
         super().__init__(parent)
         self.title("記一筆消費")
-        self.geometry("450x750")
+        self.geometry("450x780")
         self.callback, self.members = callback, members
-        self.split_entries, self.check_vars = {}, {}
-        
-        # 支出內容輸入區
-        ctk.CTkLabel(self, text="這筆支出是什麼？", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=10)
-        
-        # 新增付款人選擇
+        self.split_entries, self.check_vars, self.check_boxes = {}, {}, {}
+        self.current_user = getattr(parent, "current_user", "")
+
+        # ── 標題 ──────────────────────────────────────────
+        ctk.CTkLabel(self, text="記一筆消費", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 5))
+
+        # ── 付款人 ────────────────────────────────────────
         payer_frame = ctk.CTkFrame(self, fg_color="transparent")
         payer_frame.pack(fill="x", padx=40, pady=5)
         ctk.CTkLabel(payer_frame, text="誰付的錢？").pack(side="left", padx=5)
-        self.payer_var = ctk.StringVar(value=getattr(parent, "current_user", ""))
+        self.payer_var = ctk.StringVar(value=self.current_user)
         self.payer_opt = ctk.CTkOptionMenu(payer_frame, values=self.members, variable=self.payer_var)
         self.payer_opt.pack(side="right", fill="x", expand=True)
 
-        self.desc_entry = ctk.CTkEntry(self, placeholder_text="這筆支出是什麼？ (如: 午餐)"); self.desc_entry.pack(pady=10, padx=40, fill="x")
-        self.amount_entry = ctk.CTkEntry(self, placeholder_text="金額 ($)", font=ctk.CTkFont(size=20, weight="bold")); self.amount_entry.pack(pady=5, padx=40, fill="x")
-        self.amount_entry.bind("<KeyRelease>", self.auto_split)
-        
-        # 可折疊的進階選項
-        self.show_extra = False
-        self.extra_btn = ctk.CTkButton(self, text="🔽 更多選項 (地點/模式)", fg_color="transparent", 
-                                      text_color="gray", hover_color="#2c2c2c", command=self.toggle_extra)
-        self.extra_btn.pack(pady=5)
-        
-        self.extra_frame = ctk.CTkFrame(self, fg_color="transparent")
-        # 預設不 pack extra_frame
-        
-        self.loc_entry = ctk.CTkEntry(self.extra_frame, placeholder_text="地點 (選填)"); self.loc_entry.pack(pady=5, padx=40, fill="x")
-        
-        # 模式切換
-        self.mode_var = ctk.StringVar(value="equal")
-        self.mode_switch = ctk.CTkSegmentedButton(self.extra_frame, values=["equal", "custom", "contribution", "private"], 
-                                                command=self.toggle_mode, variable=self.mode_var)
-        self.mode_switch.configure(values=["平均分帳", "手動自訂", "預交公費", "個人私帳"])
-        self.mode_switch.pack(pady=10)
+        # ── 描述 & 金額 ───────────────────────────────────
+        self.desc_entry = ctk.CTkEntry(self, placeholder_text="這筆支出是什麼？ (如: 飯店住宿)")
+        self.desc_entry.pack(pady=8, padx=40, fill="x")
 
-        self.scroll = ctk.CTkScrollableFrame(self, label_text="分錢的人"); self.scroll.pack(pady=10, padx=20, fill="both", expand=True)
+        self.amt_entry = ctk.CTkEntry(self, placeholder_text="0", width=180, height=40, font=ctk.CTkFont(size=18, weight="bold"))
+        self.amt_entry.pack(pady=5)
+        self.amt_entry.bind("<KeyRelease>", lambda e: self.auto_split())
+
+        # --- 日期選擇 (New: 統一為 YYYY/MM/DD) ---
+        date_frame = ctk.CTkFrame(self, fg_color="transparent")
+        date_frame.pack(pady=5)
+        ctk.CTkLabel(date_frame, text="日期:").pack(side="left", padx=5)
         
-        # 動態生成成員勾選清單
+        # 使用 DateEntry 替代 ctk.CTkEntry，提供實體日曆選擇
+        self.date_entry = DateEntry(
+            date_frame, width=12, background='#1f538d', 
+            foreground='white', borderwidth=2, 
+            date_pattern='yyyy/mm/dd',
+            headersbackground='#2c3e50', headersforeground='white',
+            selectbackground='#3498db'
+        )
+        self.date_entry.pack(side="left", padx=5)
+
+        # ── 進階選項（預設展開）──────────────────────────
+        self.show_extra = True
+        self.extra_btn = ctk.CTkButton(
+            self, text="🔼 隱藏進階選項",
+            fg_color="transparent", text_color="gray", hover_color="#2c2c2c",
+            command=self.toggle_extra
+        )
+        self.extra_btn.pack(pady=(8, 0))
+
+        self.extra_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.extra_frame.pack(fill="x")  # 預設展開
+
+        self.loc_entry = ctk.CTkEntry(self.extra_frame, placeholder_text="地點 (選填)")
+        self.loc_entry.pack(pady=5, padx=40, fill="x")
+
+        # 分帳模式切換（直接使用中文作為 variable 值）
+        self.mode_var = ctk.StringVar(value=self.MODE_EQUAL)
+        self.mode_switch = ctk.CTkSegmentedButton(
+            self.extra_frame,
+            values=[self.MODE_EQUAL, self.MODE_CUSTOM, self.MODE_CONTRIBUTION, self.MODE_PRIVATE],
+            command=self.toggle_mode,
+            variable=self.mode_var
+        )
+        self.mode_switch.pack(pady=8, padx=20, fill="x")
+
+        # 模式說明文字
+        self.mode_hint = ctk.CTkLabel(self.extra_frame, text="", font=ctk.CTkFont(size=11), text_color="gray")
+        self.mode_hint.pack()
+
+        # ── 即時分配狀態 Label ────────────────────────────
+        self.balance_label = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=12))
+        self.balance_label.pack(pady=(5, 0))
+
+        # ── 成員勾選清單 ───────────────────────────────────
+        self.scroll = ctk.CTkScrollableFrame(self, label_text="分帳成員")
+        self.scroll.pack(pady=5, padx=20, fill="both", expand=True)
+
         for m in self.members:
-            f = ctk.CTkFrame(self.scroll, fg_color="transparent"); f.pack(fill="x", pady=2)
-            current_user = getattr(parent, "current_user", "")
-            sel = 1 if (not pre_selected or m == pre_selected or m == current_user) else 0
-            cv = ctk.IntVar(value=sel); self.check_vars[m] = cv
-            ctk.CTkCheckBox(f, text=m, variable=cv, command=self.auto_split).pack(side="left", padx=5)
-            ent = ctk.CTkEntry(f, width=80); ent.pack(side="right"); ent.insert(0, "0"); self.split_entries[m] = ent
-            
-        self.submit_btn = ctk.CTkButton(self, text="確認提交並生成帳項", command=self.submit, 
-                                       fg_color="#2ecc71", hover_color="#27ae60", height=45, font=ctk.CTkFont(weight="bold"))
-        self.submit_btn.pack(pady=20, padx=40, fill="x")
+            f = ctk.CTkFrame(self.scroll, fg_color="transparent")
+            f.pack(fill="x", pady=2)
+            sel = 1 if (not pre_selected or m == pre_selected or m == self.current_user) else 0
+            cv = ctk.IntVar(value=sel)
+            self.check_vars[m] = cv
+            cb = ctk.CTkCheckBox(f, text=m, variable=cv, command=self.auto_split)
+            cb.pack(side="left", padx=5)
+            self.check_boxes[m] = cb
+            ent = ctk.CTkEntry(f, width=80)
+            ent.pack(side="right")
+            ent.insert(0, "0")
+            self.split_entries[m] = ent
+
+        # ── 提交按鈕 ───────────────────────────────────────
+        self.submit_btn = ctk.CTkButton(
+            self, text="✅ 確認提交並生成帳項",
+            command=self.submit,
+            fg_color="#2ecc71", hover_color="#27ae60",
+            height=45, font=ctk.CTkFont(weight="bold")
+        )
+        self.submit_btn.pack(pady=15, padx=40, fill="x")
         self.auto_split()
 
     def toggle_extra(self):
         """切換顯示/隱藏進階選項"""
-        if not self.show_extra:
-            self.extra_frame.pack(after=self.extra_btn, fill="x")
-            self.extra_btn.configure(text="🔼 隱藏進階選項")
-        else:
+        if self.show_extra:
             self.extra_frame.pack_forget()
             self.extra_btn.configure(text="🔽 更多選項 (地點/模式)")
+        else:
+            self.extra_frame.pack(after=self.extra_btn, fill="x")
+            self.extra_btn.configure(text="🔼 隱藏進階選項")
         self.show_extra = not self.show_extra
 
     def toggle_mode(self, _=None):
-        """切換分帳模式時重設欄位狀態"""
+        """切換分帳模式時更新提示文字、重綁 CheckBox command，並重算"""
+        mode = self.mode_var.get()
+        hints = {
+            self.MODE_EQUAL:        "自動依人數均分，餘數分配給排序靠前的成員。",
+            self.MODE_CUSTOM:       "勾選參與者後，手動輸入各人應付金額。",
+            self.MODE_CONTRIBUTION: "請於下方勾選一位【保管人】，其他欄位自動鎖定。",
+            self.MODE_PRIVATE:      "僅記錄於個人帳單，不計入群組分帳。",
+        }
+        self.mode_hint.configure(text=hints.get(mode, ""))
+        for m, cb in self.check_boxes.items():
+            if mode == self.MODE_CONTRIBUTION:
+                cb.configure(command=lambda member=m: self._on_contribution_check(member))
+            else:
+                cb.configure(command=self.auto_split)
         self.auto_split()
 
     def auto_split(self, _=None):
-        """自動計算分帳邏輯 / 或是解鎖自訂填寫欄位"""
+        """根據模式自動計算分帳金額，並更新即時餘額提示"""
         mode = self.mode_var.get()
         try:
-            total = int(self.amount_entry.get() or 0)
-            target_user = getattr(self.master, "current_user", "")
-            
-            if mode == "private":
-                # 私帳模式：僅勾選自己，金額為總額，全部鎖定
+            total = int(self.amt_entry.get() or 0)
+
+            if mode == self.MODE_PRIVATE:
                 for m, v in self.check_vars.items():
-                    v.set(1 if m == target_user else 0)
+                    v.set(1 if m == self.current_user else 0)
                     ent = self.split_entries[m]
-                    ent.configure(state="normal"); ent.delete(0, "end")
-                    ent.insert(0, str(total) if m == target_user else "0")
+                    ent.configure(state="normal")
+                    ent.delete(0, "end")
+                    ent.insert(0, str(total) if m == self.current_user else "0")
                     ent.configure(state="readonly")
+                self._update_balance_label(total, total)
+                self.scroll.configure(label_text="分帳成員")
                 return
 
-            if mode == "contribution":
-                # 公費預交：指定一位保管人 (Holder)，預設勾選除自己以外的第一人
-                self.scroll.configure(label_text="誰負責保管這筆錢？")
+            if mode == self.MODE_CONTRIBUTION:
+                self.scroll.configure(label_text="選擇保管人（僅選一人）")
                 for m, v in self.check_vars.items():
                     ent = self.split_entries[m]
-                    ent.configure(state="normal"); ent.delete(0, "end"); ent.insert(0, "0")
+                    ent.configure(state="normal")
+                    ent.delete(0, "end")
+                    ent.insert(0, str(total) if v.get() == 1 else "0")
                     ent.configure(state="readonly")
+                self._update_balance_label(total, total)
                 return
-            
-            self.scroll.configure(label_text="分前的人")
 
+            self.scroll.configure(label_text="分帳成員")
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
-            if mode == "equal":
-                # 平均模式：禁止手動輸入，自動計算且處理餘數
-                if not sel: return
+
+            if mode == self.MODE_EQUAL:
+                if not sel:
+                    self._update_balance_label(total, 0)
+                    return
                 base, rem = total // len(sel), total % len(sel)
                 for m, ent in self.split_entries.items():
-                    ent.configure(state="normal"); ent.delete(0, "end")
-                    if m in sel: 
+                    ent.configure(state="normal")
+                    ent.delete(0, "end")
+                    if m in sel:
                         ent.insert(0, str(base + (1 if sel.index(m) < rem else 0)))
-                    else: 
+                    else:
                         ent.insert(0, "0")
                     ent.configure(state="readonly")
-            else:
-                # 自訂模式：解鎖選中的成員欄位供手動填寫
+                self._update_balance_label(total, total)
+
+            else:  # MODE_CUSTOM
                 for m, ent in self.split_entries.items():
                     if self.check_vars[m].get() == 1:
                         ent.configure(state="normal")
                     else:
-                        ent.configure(state="normal"); ent.delete(0, "end"); ent.insert(0, "0")
+                        ent.configure(state="normal")
+                        ent.delete(0, "end")
+                        ent.insert(0, "0")
                         ent.configure(state="readonly")
-        except: pass
+                current_sum = sum(int(self.split_entries[m].get() or 0) for m in sel)
+                self._update_balance_label(total, current_sum)
+        except:
+            pass
+
+    def _update_balance_label(self, total, assigned):
+        """更新即時分配狀態 Label"""
+        diff = total - assigned
+        if total == 0:
+            self.balance_label.configure(text="", text_color="gray")
+        elif diff == 0:
+            self.balance_label.configure(text=f"✅ 已全額分配：${total}", text_color="#2ecc71")
+        elif diff > 0:
+            self.balance_label.configure(text=f"⚠️ 尚有 ${diff} 未分配（已分 ${assigned} / 總額 ${total}）", text_color="#e67e22")
+        else:
+            self.balance_label.configure(text=f"❌ 超出分配 ${abs(diff)}（已分 ${assigned} / 總額 ${total}）", text_color="#e74c3c")
+
+    def _on_contribution_check(self, selected_member):
+        """預交公費模式：單選互斥"""
+        for m, v in self.check_vars.items():
+            if m != selected_member:
+                v.set(0)
+        self.auto_split()
 
     def submit(self):
-        """提交交易數據到主程式：增加總額校驗與私帳模式判定"""
+        """提交交易數據到主程式"""
         try:
-            total = int(self.amount_entry.get())
-            mode = self.mode_var.get()
+            total = int(self.amt_entry.get())
+            mode  = self.mode_var.get()
             payer = self.payer_var.get()
-            
-            if mode == "private":
-                # 私帳模式：強制僅付款人，並標記 target_gid 為 PERSONAL
-                self.callback(total, [payer], {payer: total}, self.desc_entry.get(), self.loc_entry.get(), is_private=True, payer=payer)
+            desc  = self.desc_entry.get()
+            loc   = self.loc_entry.get().strip()
+            # 獲取日期物件 (DateEntry.get_date() 直接回傳 datetime.date)
+            try:
+                dt_obj = self.date_entry.get_date()
+                final_date = dt_obj.strftime("%Y-%m-%d")
+            except Exception:
+                from tkinter import messagebox
+                messagebox.showerror("日期錯誤", "無法讀取所選日期，請重新選擇。")
+                return
+
+            # ── 個人私帳 ──────────────────────────────────
+            if mode == self.MODE_PRIVATE:
+                self.callback(total, [payer], {payer: total}, desc, loc, is_private=True, payer=payer, date=final_date)
                 self.destroy()
                 return
 
-            if mode == "contribution":
-                # 公費預交：建立一筆特別交易，類型為 CONTRIBUTION
-                # 必須選中一位保管人
+            # ── 預交公費 ──────────────────────────────────
+            if mode == self.MODE_CONTRIBUTION:
                 sel = [m for m, v in self.check_vars.items() if v.get() == 1]
                 if len(sel) != 1:
                     from tkinter import messagebox
-                    messagebox.showerror("選擇錯誤", "「預交公費」模式請僅選擇一位成員作為『保管人』。")
+                    messagebox.showerror("選擇錯誤", "「預交公費」模式請僅勾選一位成員作為保管人。")
                     return
-                
                 holder = sel[0]
-                # Payer: 指定的付款人, Participants: [保管人], Amount: 全部由保管人「欠」付款人
-                self.callback(total, [holder], {holder: total}, self.desc_entry.get(), self.loc_entry.get(), tx_type="CONTRIBUTION", payer=payer)
+                self.callback(total, [holder], {holder: total}, desc, loc, tx_type="CONTRIBUTION", payer=payer, date=final_date)
                 self.destroy()
                 return
 
+            # ── 平均分帳 / 手動自訂 ───────────────────────
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
-            
-            # 收集分帳數據
-            custom_splits = {}
-            current_sum = 0
-            for m in sel:
-                amt = int(self.split_entries[m].get() or 0)
-                custom_splits[m] = amt
-                current_sum += amt
-            
-            # 校驗總額是否相符
+            if not sel:
+                from tkinter import messagebox
+                messagebox.showerror("未選成員", "請至少勾選一位分帳成員。")
+                return
+
+            custom_splits = {m: int(self.split_entries[m].get() or 0) for m in sel}
+            current_sum   = sum(custom_splits.values())
+
             if current_sum != total:
                 from tkinter import messagebox
-                messagebox.showerror("金額錯誤", f"分帳總和 ({current_sum}) 與總金額 ({total}) 不符！\n請檢查各人金額。")
+                messagebox.showerror("金額錯誤", f"分帳總和（${current_sum}）與總金額（${total}）不符！")
                 return
 
-            if total > 0 and sel: 
-                self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get(), payer=payer)
-                self.destroy()
+            self.callback(total, sel, custom_splits, desc, loc, payer=payer, date=final_date)
+            self.destroy()
         except Exception as e:
-            print(f"Submit error: {e}")
+            from tkinter import messagebox
+            messagebox.showerror("格式錯誤", "請檢查金額輸入是否正確！")
 
 class QRDialog(ctk.CTkToplevel):
+    """我的 QR 名片對話框"""
     def __init__(self, parent, qr_path, uid):
         super().__init__(parent)
         self.title("我的 QR Code 名片")
-        self.geometry("400x500")
+        self.geometry("400x550")
         ctk.CTkLabel(self, text=f"掃描以加入 {uid}", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
         img = Image.open(qr_path)
         ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(300, 300))
@@ -259,8 +365,15 @@ class TransactionDetailDialog(ctk.CTkToplevel):
         info_frame.pack(fill="x", padx=30, pady=10)
         
         loc = self.details['loc'] or "未提供地點"
-        ctk.CTkLabel(info_frame, text=f" 地點: {loc}").pack(anchor="w", padx=20, pady=5)
-        ctk.CTkLabel(info_frame, text=f" 時間: {self.details['time']}").pack(anchor="w", padx=20, pady=5)
+        ctk.CTkLabel(info_frame, text=f" 📍 地點: {loc}").pack(anchor="w", padx=20, pady=5)
+        
+        # 格式化顯示時間
+        raw_time = self.details['time']
+        if isinstance(raw_time, str):
+            display_time = raw_time[:10].replace('-', '/')
+        else:
+            display_time = raw_time.strftime('%Y/%m/%d')
+        ctk.CTkLabel(info_frame, text=f" 📅 時間: {display_time}").pack(anchor="w", padx=20, pady=5)
         ctk.CTkLabel(info_frame, text=f" 付款人: {self.details['payer']}").pack(anchor="w", padx=20, pady=5)
         
         # 參與者清單區
@@ -291,7 +404,31 @@ class TransactionDetailDialog(ctk.CTkToplevel):
                     command=lambda uid=p['user_id'], amt=p['amount']: self.do_repay(uid, amt)
                 ).pack(side="right", padx=5)
 
-        ctk.CTkButton(self, text="關閉", command=self.destroy).pack(pady=20)
+        # 底部按鈕區
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        ctk.CTkButton(btn_frame, text="關閉", command=self.destroy, width=100).pack(side="left", padx=10)
+        
+        # 僅付款人可刪除交易 (防呆)
+        if self.current_user == self.details['payer']:
+            ctk.CTkButton(
+                btn_frame, text="🗑️ 刪除交易", 
+                fg_color="#e74c3c", hover_color="#c0392b",
+                command=self.do_delete, width=100
+            ).pack(side="left", padx=10)
+
+    def do_delete(self):
+        """執行刪除交易操作"""
+        from tkinter import messagebox
+        confirm = messagebox.askyesno("確認刪除", "確定要刪除這筆交易嗎？此操作無法恢復。")
+        if confirm:
+            if self.system.delete_transaction(self.details['id']):
+                messagebox.showinfo("成功", "交易已刪除！")
+                if self.refresh_cb: self.refresh_cb()
+                self.destroy()
+            else:
+                messagebox.showerror("錯誤", "刪除失敗，請檢查資料庫狀態。")
 
     def do_repay(self, debtor_id, amount):
         """執行還款操作"""

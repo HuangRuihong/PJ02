@@ -1,22 +1,15 @@
 @echo off
 chcp 65001 >nul
-echo [資料庫更新] 正在檢查資料庫結構...
+echo [資料庫更新] 正在檢查並應用遷移...
 
-where python >nul 2>nul
-if %ERRORLEVEL% neq 0 (
-    echo [錯誤] 找不到 Python 環境。請安裝 Python 以使用此工具。
-    pause
-    exit /b 1
-)
-
-python "%~dp0..\backend\core\db_update.py"
-
+pushd "%~dp0.."
+python backend\core\db_update.py
 if %ERRORLEVEL% equ 0 (
     echo.
-    echo [資料庫更新] 成功完成。
+    echo [成功] 資料庫已是最新版本。
 ) else (
     echo.
-    echo [資料庫更新] 過程中發生錯誤，請檢查上方訊息。
+    echo [錯誤] 更新資料庫時發生異常。
 )
-
+popd
 pause

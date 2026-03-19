@@ -66,14 +66,24 @@ class AddTransactionDialog(ctk.CTkToplevel):
         self.payer_opt = ctk.CTkOptionMenu(payer_frame, values=self.members, variable=self.payer_var)
         self.payer_opt.pack(side="right", fill="x", expand=True)
 
-        self.desc_entry = ctk.CTkEntry(self, placeholder_text="內容描述 (如: 午餐、高鐵)"); self.desc_entry.pack(pady=5, padx=40, fill="x")
-        self.loc_entry = ctk.CTkEntry(self, placeholder_text="地點 (選填)"); self.loc_entry.pack(pady=5, padx=40, fill="x")
-        self.amount_entry = ctk.CTkEntry(self, placeholder_text="總金額"); self.amount_entry.pack(pady=10, padx=40, fill="x")
+        self.desc_entry = ctk.CTkEntry(self, placeholder_text="這筆支出是什麼？ (如: 午餐)"); self.desc_entry.pack(pady=10, padx=40, fill="x")
+        self.amount_entry = ctk.CTkEntry(self, placeholder_text="金額 ($)", font=ctk.CTkFont(size=20, weight="bold")); self.amount_entry.pack(pady=5, padx=40, fill="x")
         self.amount_entry.bind("<KeyRelease>", self.auto_split)
         
-        # 新增模式切換：平均 vs 自訂
+        # 可折疊的進階選項
+        self.show_extra = False
+        self.extra_btn = ctk.CTkButton(self, text="🔽 更多選項 (地點/模式)", fg_color="transparent", 
+                                      text_color="gray", hover_color="#2c2c2c", command=self.toggle_extra)
+        self.extra_btn.pack(pady=5)
+        
+        self.extra_frame = ctk.CTkFrame(self, fg_color="transparent")
+        # 預設不 pack extra_frame
+        
+        self.loc_entry = ctk.CTkEntry(self.extra_frame, placeholder_text="地點 (選填)"); self.loc_entry.pack(pady=5, padx=40, fill="x")
+        
+        # 模式切換
         self.mode_var = ctk.StringVar(value="equal")
-        self.mode_switch = ctk.CTkSegmentedButton(self, values=["equal", "custom", "contribution", "private"], 
+        self.mode_switch = ctk.CTkSegmentedButton(self.extra_frame, values=["equal", "custom", "contribution", "private"], 
                                                 command=self.toggle_mode, variable=self.mode_var)
         self.mode_switch.configure(values=["平均分帳", "手動自訂", "預交公費", "個人私帳"])
         self.mode_switch.pack(pady=10)
@@ -83,15 +93,26 @@ class AddTransactionDialog(ctk.CTkToplevel):
         # 動態生成成員勾選清單
         for m in self.members:
             f = ctk.CTkFrame(self.scroll, fg_color="transparent"); f.pack(fill="x", pady=2)
-            # 判斷是否預選（如果是好友快速記帳，則預選該好友）
             current_user = getattr(parent, "current_user", "")
             sel = 1 if (not pre_selected or m == pre_selected or m == current_user) else 0
             cv = ctk.IntVar(value=sel); self.check_vars[m] = cv
             ctk.CTkCheckBox(f, text=m, variable=cv, command=self.auto_split).pack(side="left", padx=5)
             ent = ctk.CTkEntry(f, width=80); ent.pack(side="right"); ent.insert(0, "0"); self.split_entries[m] = ent
             
-        ctk.CTkButton(self, text="確認提交並生成帳單", command=self.submit, fg_color="#1f538d").pack(pady=20)
+        self.submit_btn = ctk.CTkButton(self, text="確認提交並生成帳項", command=self.submit, 
+                                       fg_color="#2ecc71", hover_color="#27ae60", height=45, font=ctk.CTkFont(weight="bold"))
+        self.submit_btn.pack(pady=20, padx=40, fill="x")
         self.auto_split()
+
+    def toggle_extra(self):
+        """切換顯示/隱藏進階選項"""
+        if not self.show_extra:
+            self.extra_frame.pack(after=self.extra_btn, fill="x")
+            self.extra_btn.configure(text="🔼 隱藏進階選項")
+        else:
+            self.extra_frame.pack_forget()
+            self.extra_btn.configure(text="🔽 更多選項 (地點/模式)")
+        self.show_extra = not self.show_extra
 
     def toggle_mode(self, _=None):
         """切換分帳模式時重設欄位狀態"""
@@ -290,3 +311,27 @@ class TransactionDetailDialog(ctk.CTkToplevel):
                 self.destroy()
             else:
                 messagebox.showerror("錯誤", "還款操作失敗，請稍後再試。")
+
+class BudgetDialog(ctk.CTkToplevel):
+    """預算設定對話框：讓使用者輸入群組的總預算"""
+    def __init__(self, parent, current_budget, callback):
+        super().__init__(parent)
+        self.title("設定群組預算")
+        self.geometry("350x250")
+        self.callback = callback
+        
+        ctk.CTkLabel(self, text="設定本次旅遊/活動總預算", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
+        self.budget_entry = ctk.CTkEntry(self, placeholder_text="輸入總預算金額 (如: 50000)", width=200)
+        self.budget_entry.insert(0, str(current_budget) if current_budget > 0 else "")
+        self.budget_entry.pack(pady=10)
+        
+        ctk.CTkButton(self, text="儲存預算", command=self.submit, fg_color="#2ecc71").pack(pady=20)
+
+    def submit(self):
+        try:
+            val = int(self.budget_entry.get().strip() or 0)
+            self.callback(val)
+            self.destroy()
+        except ValueError:
+            from tkinter import messagebox
+            messagebox.showerror("格式錯誤", "請輸入有效的數字金額！")

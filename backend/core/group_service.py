@@ -59,6 +59,35 @@ class GroupService(BaseService):
             cursor.execute("SELECT user_id FROM group_members WHERE group_id = ?", (group_id,))
             return [row[0] for row in cursor.fetchall()]
 
+    def set_group_budget(self, group_id, amount):
+        """設定群組的總預算"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("UPDATE groups SET budget = ? WHERE group_id = ?", (amount, group_id))
+                conn.commit()
+                return True
+            except Exception: return False
+
+    def get_group_budget_status(self, group_id):
+        """獲取群組預算剩餘狀況 (預算 - 已支出)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. 取得總預算
+            cursor.execute("SELECT budget FROM groups WHERE group_id = ?", (group_id,))
+            row = cursor.fetchone()
+            budget = row[0] if row else 0
+            
+            # 2. 取得該群組累積支出 (僅統計 EXPENSE 類型)
+            cursor.execute("SELECT SUM(amount) FROM transactions WHERE group_id = ? AND type = 'EXPENSE'", (group_id,))
+            spent = cursor.fetchone()[0] or 0
+            
+            return {
+                "budget": budget,
+                "spent": spent,
+                "remaining": budget - spent
+            }
+
     def propose_transaction(self, transaction_id, payer_id, amount_float, participants, group_id, custom_splits=None, tx_type=TransactionType.EXPENSE.name, description="", location=""):
         """發起一筆新交易並計算分帳"""
         amount_twd = int(round(amount_float))

@@ -23,6 +23,9 @@ def update_schema():
         if "join_code" not in cols:
             print("正在更新 groups 表：加入 join_code 欄位...")
             cursor.execute("ALTER TABLE groups ADD COLUMN join_code TEXT")
+        if "budget" not in cols:
+            print("正在更新 groups 表：加入 budget 欄位...")
+            cursor.execute("ALTER TABLE groups ADD COLUMN budget INTEGER DEFAULT 0")
             
         # 2. transactions 表加入 description, location
         cursor.execute("PRAGMA table_info(transactions)")

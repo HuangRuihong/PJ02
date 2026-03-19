@@ -45,64 +45,14 @@ class FriendsFrame(ctk.CTkFrame):
         self.scroll = ctk.CTkScrollableFrame(self, label_text="好友關係一覽")
         self.scroll.pack(fill="both", expand=True, padx=20, pady=10)
 
-    def show_mock_qr(self):
-        """產生並顯示專屬於當前使用者的 QR Code 彈出視窗"""
-        # 1. 產生 QR Code 圖片
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
-        qr.add_data(self.current_user) # 將目前使用者的名字塞入 QR 碼
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        
-        # 先存到本地暫存，給 customtkinter 讀取
-        temp_path = "temp_my_qr.png"
-        img.save(temp_path)
-        
-        # 2. 建立新視窗顯示圖片
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("我的名片")
-        dialog.geometry("350x450")
-        dialog.attributes("-topmost", True) # 保持在最上層
-        
-        ctk.CTkLabel(dialog, text=f"讓好友掃描此 QR Code", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
-        
-        pil_img = Image.open(temp_path)
-        ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(250, 250))
-        ctk.CTkLabel(dialog, image=ctk_img, text="").pack(pady=10)
-        
-        ctk.CTkLabel(dialog, text=f"您的 ID: {self.current_user}", text_color="gray", font=ctk.CTkFont(size=14)).pack(pady=10)
-        ctk.CTkButton(dialog, text="關閉", command=dialog.destroy).pack(pady=10)
-
-    def mock_scan_qr(self):
-        """模擬掃描 QR Code 並成功加入好友的互動視窗"""
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("掃描名片")
-        dialog.geometry("350x250")
-        dialog.attributes("-topmost", True)
-        
-        ctk.CTkLabel(dialog, text="正在開啟鏡頭 / 選擇相片...", font=ctk.CTkFont(size=16)).pack(pady=20)
-        ctk.CTkLabel(dialog, text="(目前為測試模式：請直接輸入好友 ID)", text_color="gray").pack()
-        
-        input_id = ctk.CTkEntry(dialog, placeholder_text="例如: 新室友D")
-        input_id.pack(pady=15, padx=20, fill="x")
-        
-        def confirm_scan():
-            new_friend = input_id.get().strip()
-            if new_friend:
-                print(f"[掃描成功] 寫入資料庫加入好友：{new_friend}")
-                # 雙向寫入真實後端
-                if self.system.add_friend(self.current_user, new_friend):
-                    self.refresh() # 重繪好友卡片列表
-                dialog.destroy()
-        
-        ctk.CTkButton(dialog, text="確認掃描", command=confirm_scan, fg_color="#27ae60").pack(pady=10)
     def load_real_data(self):
         """從資料庫載入真實的好友名單與餘額結算狀態"""
         friends = self.system.get_friends(self.current_user)
         summary = self.system.get_user_summary(self.current_user)
         
-        self.mock_friends = []
+        self.friends_data = []
         for f in friends:
-            self.mock_friends.append({
+            self.friends_data.append({
                 "id": f,
                 "balance": summary.get(f, 0),
                 "overdue_days": 0 # 這部分可未來串接 check_overdue_transactions
@@ -110,30 +60,26 @@ class FriendsFrame(ctk.CTkFrame):
 
     def refresh(self):
         """重新整理或切換到這頁時，呼叫此函數重新繪製內容"""
+        # 如果 self.scroll 還沒建立則返回 (預防初始化順序問題)
+        if not hasattr(self, 'scroll'): return
+        
         # 清空舊畫面
         for w in self.scroll.winfo_children(): w.destroy()
         
         # 從真實系統獲取好友
         friends = self.system.get_friends(self.current_user)
+        # 獲取與所有人的債務總結 {friend_id: balance}
+        summary = self.system.get_user_summary(self.current_user)
         
         if not friends:
             ctk.CTkLabel(self.scroll, text="你目前還沒加入任何好友喔！", text_color="gray").pack(pady=20)
             return
 
         for fid in friends:
-            # 取得與該好友的結算狀態 (簡單實作：掃描所有共同群組的餘額)
-            total_bal = 0
-            groups = self.system.get_user_groups(self.current_user)
-            for g in groups:
-                mems = self.system.get_group_members(g['id'])
-                if fid in mems:
-                    gb = self.system.get_group_balances(g['id'])
-                    # 這邊邏輯較複雜，暫以簡化的 A vs B 差額表示
-                    # 現有系統是群組制的，暫時只顯示有無共同債務
-                    pass 
-            
-            # 使用 Mock 資訊包裝真實 ID
-            self.create_friend_card({"id": fid, "balance": 0, "overdue_days": 0})
+            # 取得與該好友的正確餘額
+            bal = summary.get(fid, 0)
+            # 建立好友卡片
+            self.create_friend_card({"id": fid, "balance": bal, "overdue_days": 0})
 
     def create_friend_card(self, friend):
         """畫出【單一位好友】的詳細卡片與對應按鈕"""

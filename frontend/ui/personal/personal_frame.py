@@ -38,7 +38,7 @@ class PersonalFrame(ctk.CTkFrame):
         receivables = sum(val for val in summary.values() if val > 0)
         payables = sum(abs(val) for val in summary.values() if val < 0)
         
-        self.mock_dashboard = {
+        self.dashboard_data = {
             "total_assets": total_assets,
             "receivables": receivables,
             "payables": payables
@@ -46,10 +46,10 @@ class PersonalFrame(ctk.CTkFrame):
         
         # 2. 待辦事項 (從應付帳款 payables 中篩出 PENDING 的項目)
         debts, _ = self.system.get_personal_debts(self.current_user)
-        self.mock_pending_inbox = []
+        self.pending_inbox = []
         for d in debts:
             if d['status'] == 'PENDING':
-                self.mock_pending_inbox.append({
+                self.pending_inbox.append({
                     "id": d['tx_id'], "payer": d['creditor'], "desc": d['desc'],
                     "amount": d['amount'], "date": str(d['date'])[:10], "status": "Pending",
                     "type": d.get('type'), "loc": d.get('loc')
@@ -58,17 +58,17 @@ class PersonalFrame(ctk.CTkFrame):
         # 3. 個人歷史流水紀錄
         try:
             history = self.system.get_personal_history(self.current_user)
-            self.mock_history = []
+            self.history_data = []
             for tx in history:
                 is_payer = tx.get('payer_id') == self.current_user
-                self.mock_history.append({
+                self.history_data.append({
                     "id": tx['id'], "desc": tx['description'] or "無描述", 
                     "amount": tx['amount'], "date": str(tx['timestamp'])[:10], 
                     "type": "我付錢" if is_payer else "別人付錢"
                 })
         except Exception as e:
             print("History Load Error:", e)
-            self.mock_history = []
+            self.history_data = []
 
     def do_confirm(self, tx_id, tx_type=None, loc_str=None, payer_id=None):
         """處理真實確認交易連動 / 審核結清申請"""

@@ -38,6 +38,7 @@ class AccountingGUI(ctk.CTk):
         self.title("mysalf - 多人群組本地記帳系統")
         self.geometry("1150x900")
         ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("dark-blue")
         
         # 核心數據系統初始化
         self.system = DebtSystem()
@@ -131,17 +132,23 @@ class AccountingGUI(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self.main_container, width=200, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         
-        ctk.CTkLabel(self.sidebar, text=f"使用者: {self.current_user}", font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
-        ctk.CTkButton(self.sidebar, text="登出系統", command=self.logout, fg_color="transparent").pack(pady=(0, 10))
+        self.user_label = ctk.CTkLabel(self.sidebar, text=f"👤 {self.current_user}", font=ctk.CTkFont(size=16, weight="bold"))
+        self.user_label.pack(pady=(30, 5))
+        
+        self.logout_btn = ctk.CTkButton(self.sidebar, text="登出系統", command=self.logout, 
+                                    fg_color="transparent", border_width=1, border_color="#e74c3c", 
+                                    text_color="#e74c3c", hover_color="#2c2c2c", height=28)
+        self.logout_btn.pack(pady=(0, 25), padx=20)
         
         # 全局快速記帳按鈕
-        self.quick_add_btn = ctk.CTkButton(self.sidebar, text="快速記帳", 
-                                          command=self.open_global_add_tx,
-                                          fg_color="#1f538d", hover_color="#14375e", height=40)
-        self.quick_add_btn.pack(pady=10, padx=10, fill="x")
+        self.quick_add_btn = ctk.CTkButton(self.sidebar, text="快速記帳 (Quick Add)", 
+                                        command=self.open_global_add_tx,
+                                        fg_color="#3498db", hover_color="#2980b9", height=45, font=ctk.CTkFont(weight="bold"))
+        self.quick_add_btn.pack(pady=15, padx=15, fill="x")
         
         ctk.CTkLabel(self.sidebar, text="選擇群組", font=ctk.CTkFont(size=12)).pack(pady=(10, 0))
         self.group_opt = ctk.CTkOptionMenu(self.sidebar, values=[], command=self.switch_group)
+        self.group_opt.set("(尚無群組)")
         self.group_opt.pack(padx=10, pady=5)
         
         ctk.CTkButton(self.sidebar, text="+ 加入群組", command=self.open_join_group).pack(pady=5, padx=10, fill="x")
@@ -177,14 +184,24 @@ class AccountingGUI(ctk.CTk):
             self.current_group_id, self.current_group_name, self.current_group_code = g["id"], g["name"], g["code"]
         else:
             self.current_group_id = None
-            self.current_group_name = "沒有任何群組"
+            self.current_group_name = "(尚無群組)"
             self.current_group_code = "----"
         self.refresh_ui()
 
     def refresh_ui(self):
         """刷新全局界面：更新側邊欄群組選單與各分頁內容"""
         groups = self.system.get_user_groups(self.current_user)
-        self.group_opt.configure(values=[g["name"] for g in groups])
+        names = [g["name"] for g in groups]
+        self.group_opt.configure(values=names)
+        
+        if names:
+            # 確保選單顯示當前選擇的群組名稱
+            if self.current_group_name in names:
+                self.group_opt.set(self.current_group_name)
+            else:
+                self.group_opt.set(names[0])
+        else:
+            self.group_opt.set("(尚無群組)")
         
         # 分別呼叫各個分頁的 refresh 方法
         self.tab_p.refresh()

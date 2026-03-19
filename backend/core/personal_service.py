@@ -8,6 +8,10 @@ class PersonalService(BaseService):
     
     def add_friend(self, user_id, friend_id):
         """建立好友關係 (雙向)"""
+        # 防止加自己為好友
+        if str(user_id) == str(friend_id):
+            return False
+            
         with self._get_connection() as conn:
             cursor = conn.cursor()
             try:

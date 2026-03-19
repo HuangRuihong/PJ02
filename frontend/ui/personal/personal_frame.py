@@ -60,10 +60,10 @@ class PersonalFrame(ctk.CTkFrame):
             history = self.system.get_personal_history(self.current_user)
             self.mock_history = []
             for tx in history:
-                is_payer = tx.get('payer') == self.current_user
+                is_payer = tx.get('payer_id') == self.current_user
                 self.mock_history.append({
-                    "id": tx['id'], "desc": tx['desc'] or "無描述", 
-                    "amount": tx['amount'], "date": str(tx['time'])[:10], 
+                    "id": tx['id'], "desc": tx['description'] or "無描述", 
+                    "amount": tx['amount'], "date": str(tx['timestamp'])[:10], 
                     "type": "我付錢" if is_payer else "別人付錢"
                 })
         except Exception as e:

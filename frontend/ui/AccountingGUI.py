@@ -23,6 +23,7 @@ from frontend.ui.analysis.calendar_frame import CalendarFrame
 try:
     from pyzbar.pyzbar import decode
     import cv2
+    import numpy as np
     SCAN_SUPPORT = True
 except ImportError:
     SCAN_SUPPORT = False
@@ -232,7 +233,7 @@ class AccountingGUI(ctk.CTk):
         mems = self.system.get_group_members(self.current_group_id)
         AddTransactionDialog(self, mems, self.add_tx_cb, pre_selected=force_participant)
 
-    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE"):
+    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None):
         """交易對話框提交後的回調"""
         tid = f"tx_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
@@ -242,7 +243,10 @@ class AccountingGUI(ctk.CTk):
         # 安全檢查：若非私帳且無當前群組，則轉為私帳 (防止邊際案例)
         if not target_gid: target_gid = "PERSONAL"
         
-        if self.system.propose_transaction(tid, self.current_user, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc): 
+        # 若無指定付款人，預設為當前登入者
+        actual_payer = payer if payer else self.current_user
+
+        if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc): 
             self.refresh_ui()
 
     def confirm_tx(self, tid): 
@@ -268,7 +272,9 @@ class AccountingGUI(ctk.CTk):
             return
         p = fd.askopenfilename()
         if p:
-            objs = decode(cv2.imread(p))
+            # 修正 OpenCV 無法直接透過 imread 讀取中文路徑的問題
+            img = cv2.imdecode(np.fromfile(p, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+            objs = decode(img)
             if objs:
                 fid = objs[0].data.decode('utf-8')
                 if self.system.add_friend(self.current_user, fid):

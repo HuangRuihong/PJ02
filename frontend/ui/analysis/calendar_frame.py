@@ -47,11 +47,11 @@ class CalendarFrame(ctk.CTkFrame):
         txs = self.system.get_personal_history(self.current_user)
         found = False
         for tx in txs:
-            if str(tx["time"]).startswith(date_str):
+            if str(tx["timestamp"]).startswith(date_str):
                 found = True
                 f = ctk.CTkFrame(self.detail_scroll); f.pack(fill="x", pady=2, padx=5)
-                payer_text = "你付了" if tx.get('payer') == self.current_user else f"{tx.get('payer')} 付了"
-                ctk.CTkLabel(f, text=f"{tx['desc'] if tx['desc'] else '無描述'}", width=150, anchor="w").pack(side="left", padx=10)
+                payer_text = "你付了" if tx.get('payer_id') == self.current_user else f"{tx.get('payer_id')} 付了"
+                ctk.CTkLabel(f, text=f"{tx['description'] if tx['description'] else '無描述'}", width=150, anchor="w").pack(side="left", padx=10)
                 ctk.CTkLabel(f, text=f"{payer_text} ${tx['amount']}", width=150).pack(side="left", padx=10)
                 ctk.CTkLabel(f, text=f"{tx['status']}", text_color="#3498db").pack(side="right", padx=10)
         

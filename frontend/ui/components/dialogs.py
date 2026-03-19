@@ -57,8 +57,17 @@ class AddTransactionDialog(ctk.CTkToplevel):
         
         # 支出內容輸入區
         ctk.CTkLabel(self, text="這筆支出是什麼？", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=10)
-        self.desc_entry = ctk.CTkEntry(self, placeholder_text="內容"); self.desc_entry.pack(pady=5, padx=40, fill="x")
-        self.loc_entry = ctk.CTkEntry(self, placeholder_text="地點"); self.loc_entry.pack(pady=5, padx=40, fill="x")
+        
+        # 新增付款人選擇
+        payer_frame = ctk.CTkFrame(self, fg_color="transparent")
+        payer_frame.pack(fill="x", padx=40, pady=5)
+        ctk.CTkLabel(payer_frame, text="誰付的錢？").pack(side="left", padx=5)
+        self.payer_var = ctk.StringVar(value=getattr(parent, "current_user", ""))
+        self.payer_opt = ctk.CTkOptionMenu(payer_frame, values=self.members, variable=self.payer_var)
+        self.payer_opt.pack(side="right", fill="x", expand=True)
+
+        self.desc_entry = ctk.CTkEntry(self, placeholder_text="內容描述 (如: 午餐、高鐵)"); self.desc_entry.pack(pady=5, padx=40, fill="x")
+        self.loc_entry = ctk.CTkEntry(self, placeholder_text="地點 (選填)"); self.loc_entry.pack(pady=5, padx=40, fill="x")
         self.amount_entry = ctk.CTkEntry(self, placeholder_text="總金額"); self.amount_entry.pack(pady=10, padx=40, fill="x")
         self.amount_entry.bind("<KeyRelease>", self.auto_split)
         
@@ -75,15 +84,13 @@ class AddTransactionDialog(ctk.CTkToplevel):
         for m in self.members:
             f = ctk.CTkFrame(self.scroll, fg_color="transparent"); f.pack(fill="x", pady=2)
             # 判斷是否預選（如果是好友快速記帳，則預選該好友）
-            # parent.current_user 的取得需注意，因為父視窗多層級。
-            # 通常傳進來的 parent 是主視窗 (AccountingGUI)
             current_user = getattr(parent, "current_user", "")
             sel = 1 if (not pre_selected or m == pre_selected or m == current_user) else 0
             cv = ctk.IntVar(value=sel); self.check_vars[m] = cv
             ctk.CTkCheckBox(f, text=m, variable=cv, command=self.auto_split).pack(side="left", padx=5)
             ent = ctk.CTkEntry(f, width=80); ent.pack(side="right"); ent.insert(0, "0"); self.split_entries[m] = ent
             
-        ctk.CTkButton(self, text="完成並提交", command=self.submit).pack(pady=20)
+        ctk.CTkButton(self, text="確認提交並生成帳單", command=self.submit, fg_color="#1f538d").pack(pady=20)
         self.auto_split()
 
     def toggle_mode(self, _=None):
@@ -145,11 +152,11 @@ class AddTransactionDialog(ctk.CTkToplevel):
         try:
             total = int(self.amount_entry.get())
             mode = self.mode_var.get()
+            payer = self.payer_var.get()
             
             if mode == "private":
                 # 私帳模式：強制僅付款人，並標記 target_gid 為 PERSONAL
-                target_user = getattr(self.master, "current_user", "")
-                self.callback(total, [target_user], {target_user: total}, self.desc_entry.get(), self.loc_entry.get(), is_private=True)
+                self.callback(total, [payer], {payer: total}, self.desc_entry.get(), self.loc_entry.get(), is_private=True, payer=payer)
                 self.destroy()
                 return
 
@@ -163,8 +170,8 @@ class AddTransactionDialog(ctk.CTkToplevel):
                     return
                 
                 holder = sel[0]
-                # Payer: 我, Participants: [保管人], Amount: 全部由保管人「欠」我
-                self.callback(total, [holder], {holder: total}, self.desc_entry.get(), self.loc_entry.get(), tx_type="CONTRIBUTION")
+                # Payer: 指定的付款人, Participants: [保管人], Amount: 全部由保管人「欠」付款人
+                self.callback(total, [holder], {holder: total}, self.desc_entry.get(), self.loc_entry.get(), tx_type="CONTRIBUTION", payer=payer)
                 self.destroy()
                 return
 
@@ -185,7 +192,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 return
 
             if total > 0 and sel: 
-                self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get())
+                self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get(), payer=payer)
                 self.destroy()
         except Exception as e:
             print(f"Submit error: {e}")

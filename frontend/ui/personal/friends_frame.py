@@ -36,10 +36,10 @@ class FriendsFrame(ctk.CTkFrame):
                                     command=lambda: self.winfo_toplevel().show_my_qr())
         self.my_qr_btn.pack(side="left", padx=5)
         
-        # 掃描名片按鈕 
-        self.scan_btn = ctk.CTkButton(btn_container, text="掃描好友名片", width=120, 
-                                    command=lambda: self.winfo_toplevel().scan_qr_from_file())
-        self.scan_btn.pack(side="left", padx=5)
+        # 加入好友按鈕
+        self.add_friend_btn = ctk.CTkButton(btn_container, text="+ 加入好友", width=120, 
+                                          command=self.open_add_friend_dialog)
+        self.add_friend_btn.pack(side="left", padx=5)
         
         # 建立放好友卡片的大捲軸
         self.scroll = ctk.CTkScrollableFrame(self, label_text="好友關係一覽")
@@ -75,7 +75,11 @@ class FriendsFrame(ctk.CTkFrame):
             ctk.CTkLabel(self.scroll, text="你目前還沒加入任何好友喔！", text_color="gray").pack(pady=20)
             return
 
-        for fid in friends:
+        # 根據與該好友的「欠債/應收金額絕對值」由高到低降序排列
+        # 金額越大越重要，排在前面
+        sorted_friends = sorted(friends, key=lambda fid: abs(summary.get(fid, 0)), reverse=True)
+
+        for fid in sorted_friends:
             # 取得與該好友的正確餘額
             bal = summary.get(fid, 0)
             # 建立好友卡片
@@ -140,6 +144,29 @@ class FriendsFrame(ctk.CTkFrame):
         elif bal < 0:
             ctk.CTkButton(right_area, text="✅ 已結清", width=90, fg_color="#27ae60", hover_color="#2ecc71",
                           command=lambda u=fid, amt=abs(bal): self.open_repay_dialog(u, amt)).pack(side="left", padx=5)
+
+    def open_add_friend_dialog(self):
+        """開啟加入好友對話框"""
+        from frontend.ui.components.dialogs import AddFriendDialog
+        AddFriendDialog(
+            self.winfo_toplevel(),
+            add_cb=self.add_friend_by_id_cb,
+            scan_cb=self.winfo_toplevel().scan_qr_from_file
+        )
+
+    def add_friend_by_id_cb(self, fid):
+        """透過 ID 加入好友的回調"""
+        from tkinter import messagebox
+        if fid == self.current_user:
+            messagebox.showwarning("提示", "不能加自己為好友喔！")
+            return
+            
+        if self.system.add_friend(self.current_user, fid):
+            messagebox.showinfo("成功", f"已成功加入好友：{fid}")
+            self.refresh()
+            self.winfo_toplevel().refresh_ui()
+        else:
+            messagebox.showerror("失敗", "無法加入該好友（可能 ID 不存在或已是好友）。")
 
     def open_repay_dialog(self, target_friend, amount):
         from tkinter import messagebox

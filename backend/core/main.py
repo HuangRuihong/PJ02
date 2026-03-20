@@ -54,14 +54,14 @@ class DebtSystem(PersonalService, GroupService):
                 
                 s_id = f"st_{datetime.now().strftime('%Y%m%d%H%M%S')}_{debtor_id}"
                 cursor.execute("""
-                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (s_id, "g1", debtor_id, total_settled, TransactionStatus.SETTLED.name, TransactionType.SETTLEMENT.name, now))
+                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, timestamp, description)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (s_id, "PERSONAL", debtor_id, total_settled, TransactionStatus.SETTLED.name, TransactionType.SETTLEMENT.name, now, f"結清對 {creditor_id} 的帳款"))
                 
                 cursor.execute("""
                     INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
                     VALUES (?, ?, ?, ?, ?)
-                """, (s_id, creditor_id, -total_settled, TransactionStatus.SETTLED.name, now))
+                """, (s_id, creditor_id, total_settled, TransactionStatus.SETTLED.name, now))
                 
                 conn.commit()
                 return True

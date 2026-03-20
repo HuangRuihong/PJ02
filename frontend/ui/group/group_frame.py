@@ -7,6 +7,7 @@ class GroupFrame(ctk.CTkFrame):
     def __init__(self, parent, system):
         super().__init__(parent, fg_color="transparent")
         self.system = system
+        self.budget_val = 0  # 預先初始化避免 AttributeError
         self.setup_ui()
 
     def setup_ui(self):

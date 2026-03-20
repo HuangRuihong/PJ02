@@ -121,18 +121,21 @@ class GroupService(BaseService):
                 print(f"Error: {e}")
                 return False
 
-    def confirm_transaction(self, user_id, transaction_id):
-        """參與者確認交易項目"""
+    def confirm_transaction(self, user_id, transaction_id, status=None):
+        """參與者確認交易項目 (預設為 CONFIRMED，若為還款可指定為 SETTLED)"""
+        target_status = status if status else TransactionStatus.CONFIRMED.name
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                UPDATE transaction_participants SET status = ? 
-                WHERE transaction_id = ? AND user_id = ? AND status = ?
-            """, (TransactionStatus.CONFIRMED.name, transaction_id, user_id, TransactionStatus.PENDING.name))
+                UPDATE transaction_participants SET status = ?, settled_at = ? 
+                WHERE transaction_id = ? AND user_id = ? AND status != ?
+            """, (target_status, datetime.now() if target_status == TransactionStatus.SETTLED.name else None, 
+                  transaction_id, user_id, TransactionStatus.SETTLED.name))
             
-            cursor.execute("SELECT COUNT(*) FROM transaction_participants WHERE transaction_id = ? AND status = ?", (transaction_id, TransactionStatus.PENDING.name))
+            cursor.execute("SELECT COUNT(*) FROM transaction_participants WHERE transaction_id = ? AND status NOT IN (?, ?)", (transaction_id, TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name))
             if cursor.fetchone()[0] == 0:
-                cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (TransactionStatus.CONFIRMED.name, transaction_id))
+                # 若所有人都確認/結清了，將主表狀態同步 (優先設為 SETTLED 如果有人選了這個，或者維持 CONFIRMED)
+                cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (target_status, transaction_id))
             conn.commit()
             return True
 

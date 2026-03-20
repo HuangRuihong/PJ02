@@ -77,7 +77,8 @@ class PersonalFrame(ctk.CTkFrame):
         if tx_type == "REPAY_REQUEST":
             tx_ids = loc_str.split(",") if loc_str else []
             if self.system.settle_specific_debts(payer_id, self.current_user, tx_ids):
-                self.system.confirm_transaction(self.current_user, tx_id)
+                # 確認還款請求時，將該請求本身也標記為 SETTLED，以免它變成一筆「新債務」造成金額翻轉
+                self.system.confirm_transaction(self.current_user, tx_id, status="SETTLED")
                 messagebox.showinfo("成功", "✅ 已確認收到款項，相關債務已正式銷帳！")
                 self.winfo_toplevel().refresh_ui()
             else:
@@ -117,22 +118,10 @@ class PersonalFrame(ctk.CTkFrame):
         """畫出第一區塊：視覺化財務儀表板"""
         ctk.CTkLabel(self.dashboard_frame, text="財務總覽", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(0, 10))
         
-        # 從實體系統獲取真實餘額
-        balances = self.system.get_group_balances("PERSONAL") # 個人私帳餘額
-        # 這裡需要一個能統合個人所有債務的方法，目前暫以個別服務獲取
-        # 為了簡化，我們可以在 DebtSystem 增加一個統合餘額方法
-        # 在此暫時從後端計算所有群組的總合
-        total_receivable = 0
-        total_payable = 0
-        
-        groups = self.system.get_user_groups(self.current_user)
-        for g in groups:
-            gb = self.system.get_group_balances(g['id'])
-            my_bal = gb.get(self.current_user, 0)
-            if my_bal > 0: total_receivable += my_bal
-            else: total_payable += abs(my_bal)
-
-        total_assets = total_receivable - total_payable
+        # 使用 load_real_data 已經算好且包含「所有群組+私帳」的真實總額
+        total_receivable = self.dashboard_data.get("receivables", 0)
+        total_payable = self.dashboard_data.get("payables", 0)
+        total_assets = self.dashboard_data.get("total_assets", 0)
 
         # 建立一個橫向排列的容器放三個卡片
         cards_container = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
@@ -222,18 +211,37 @@ class PersonalFrame(ctk.CTkFrame):
         for item in history[:20]: # 僅顯示前 20 筆
             hf = ctk.CTkFrame(self.history_frame, fg_color="transparent")
             hf.pack(fill="x", pady=2)
+            hf.grid_columnconfigure(2, weight=1) # 讓描述這欄自動拉伸
             
-            # 左側：時間與描述
+            # 1. 日期欄 (固定寬度)
             date_str = item['timestamp'][:10] if isinstance(item['timestamp'], str) else item['timestamp'].strftime('%Y-%m-%d')
-            ctk.CTkLabel(hf, text=date_str).pack(side="left", padx=10)
-            ctk.CTkLabel(hf, text=f"{item['description'] or '一般支出'}", width=150, anchor="w").pack(side="left", padx=10)
+            ctk.CTkLabel(hf, text=date_str, width=100, anchor="w").grid(row=0, column=0, padx=5, sticky="w")
             
-            # 右側：金額。如果是「我付錢」就標綠，如果是「我被分帳」就標紅。
-            # 這裡的邏輯需要配合 get_personal_history 的回傳值
+            # 2. 群組標籤 (固定寬度)
+            g_name = item.get('group_name', '未知群組')
+            is_personal = "個人私帳" in g_name
+            bg_color = "#34495e" if not is_personal else "#2c3e50"
+            group_tag = ctk.CTkLabel(hf, text=g_name, font=ctk.CTkFont(size=11), width=120,
+                                    fg_color=bg_color, corner_radius=6, padx=8)
+            group_tag.grid(row=0, column=1, padx=5, sticky="w")
+            
+            # 3. 描述欄 (自動延伸)
+            ctk.CTkLabel(hf, text=f"{item['description'] or '一般支出'}", anchor="w").grid(row=0, column=2, padx=10, sticky="ew")
+            
+            # 4. 金額欄 (固定寬度且靠右)
             is_payer = (item['payer_id'] == self.current_user)
-            color = "#2ecc71" if is_payer else "#e74c3c"
-            prefix = "+" if is_payer else "-"
-            label_text = "我付錢" if is_payer else "被分帳"
+            total_amt = item['amount']
+            my_share = item.get('my_share', 0)
             
-            ctk.CTkLabel(hf, text=label_text, text_color="gray60", width=80, anchor="e").pack(side="right", padx=10)
-            ctk.CTkLabel(hf, text=f"{prefix}${item['amount']}", text_color=color, font=ctk.CTkFont(weight="bold")).pack(side="right", padx=10)
+            amt_info = ctk.CTkFrame(hf, fg_color="transparent", width=220)
+            amt_info.grid(row=0, column=3, padx=10, sticky="e")
+            
+            if is_payer:
+                # 我付錢：顯示總額 & 他人欠我 (總額 - 我那份)
+                others_owe = total_amt - my_share
+                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt} (應收回 ${others_owe})", 
+                             text_color="#2ecc71", font=ctk.CTkFont(weight="bold"), anchor="e").pack(anchor="e")
+            else:
+                # 被分帳：顯示總額 & 我要付
+                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt} (應付 ${my_share})", 
+                             text_color="#e74c3c", font=ctk.CTkFont(weight="bold"), anchor="e").pack(anchor="e")

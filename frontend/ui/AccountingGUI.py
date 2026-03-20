@@ -13,7 +13,7 @@ import tkinter.messagebox as mbox
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from backend.core.main import DebtSystem, TransactionStatus, TransactionType
 from frontend.ui.components.common import LoginFrame
-from frontend.ui.components.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog, QRDialog
+from frontend.ui.components.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog, QRDialog, AddFriendDialog
 from frontend.ui.personal.personal_frame import PersonalFrame
 from frontend.ui.group.group_frame import GroupFrame
 from frontend.ui.personal.friends_frame import FriendsFrame
@@ -237,13 +237,14 @@ class AccountingGUI(ctk.CTk):
             self.load_initial_data(target_gid=gid)
 
     def open_global_add_tx(self):
-        """側邊欄全局快速記帳：支援私帳與當前群組"""
-        # 如果有當前群組，取得成員；否則僅顯示自己
-        mems = [self.current_user]
-        if self.current_group_id:
-            mems = self.system.get_group_members(self.current_group_id)
-        
-        AddTransactionDialog(self, mems, self.add_tx_cb)
+        """側邊欄全局快速記帳：直接與當前群組功能綁定"""
+        if not self.current_group_id:
+            from tkinter import messagebox
+            # 若無群組，提醒使用者先選擇或去好友分頁發起私帳
+            messagebox.showwarning("提示", "請先選擇右上角群組，或進入好友卡片點擊發起私帳！")
+            return
+        # 直接呼叫與群組分頁相同的「記一筆」邏輯
+        self.open_add_tx()
 
     def open_add_tx(self, force_participant=None):
         """(原有的) 針對特定群組開啟新增交易對話框"""

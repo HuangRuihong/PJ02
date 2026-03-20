@@ -46,6 +46,58 @@ class CreateGroupDialog(ctk.CTkToplevel):
             self.callback(name)
             self.destroy()
 
+class AddFriendDialog(ctk.CTkToplevel):
+    """加入好友對話框：提供 ID 輸入與 QR Code 掃描兩大功能"""
+    def __init__(self, parent, add_cb, scan_cb):
+        super().__init__(parent)
+        self.title("加入好友")
+        self.geometry("380x320")
+        self.add_cb = add_cb
+        self.scan_cb = scan_cb
+        self.attributes("-topmost", True)
+        
+        # UI 配置
+        ctk.CTkLabel(self, text="➕ 加入新好友", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(20, 10))
+        
+        # 1. ID 輸入區
+        input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        input_frame.pack(pady=10, padx=40, fill="x")
+        
+        ctk.CTkLabel(input_frame, text="請輸入好友 ID:", font=ctk.CTkFont(size=13)).pack(anchor="w")
+        self.id_entry = ctk.CTkEntry(input_frame, placeholder_text="例如: user_abc", height=35)
+        self.id_entry.pack(fill="x", pady=(5, 0))
+        
+        # 2. 功能按鈕區
+        btns_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btns_frame.pack(pady=20, padx=40, fill="x")
+        
+        self.confirm_btn = ctk.CTkButton(btns_frame, text="確認加入", height=40, 
+                                        fg_color="#2ecc71", hover_color="#27ae60",
+                                        command=self.submit_id)
+        self.confirm_btn.pack(fill="x", pady=5)
+        
+        ctk.CTkLabel(btns_frame, text="--- 或者 ---", text_color="gray").pack(pady=5)
+        
+        self.scan_btn = ctk.CTkButton(btns_frame, text="📷 掃描名片圖片", height=40, 
+                                     fg_color="#34495e", hover_color="#2c3e50",
+                                     command=self.trigger_scan)
+        self.scan_btn.pack(fill="x", pady=5)
+
+    def submit_id(self):
+        """提交手動輸入的 ID"""
+        fid = self.id_entry.get().strip()
+        if fid:
+            self.add_cb(fid)
+            self.destroy()
+        else:
+            from tkinter import messagebox
+            messagebox.showwarning("格式錯誤", "請輸入有效的好友 ID！")
+
+    def trigger_scan(self):
+        """觸發主程式的 QR Code 掃描功能"""
+        self.scan_cb()
+        self.destroy()
+
 class AddTransactionDialog(ctk.CTkToplevel):
     """新增交易對話框：處理消費金額錄入、參與者選擇與自動分帳邏輯"""
     def __init__(self, parent, members, callback, pre_selected=None):
@@ -122,7 +174,8 @@ class AddTransactionDialog(ctk.CTkToplevel):
         """自動計算分帳邏輯 / 或是解鎖自訂填寫欄位"""
         mode = self.mode_var.get()
         try:
-            total = int(self.amount_entry.get() or 0)
+            val_str = self.amount_entry.get().strip()
+            total = int(val_str) if val_str else 0
             target_user = getattr(self.master, "current_user", "")
             
             if mode == "private":
@@ -171,7 +224,17 @@ class AddTransactionDialog(ctk.CTkToplevel):
     def submit(self):
         """提交交易數據到主程式：增加總額校驗與私帳模式判定"""
         try:
-            total = int(self.amount_entry.get())
+            val_str = self.amount_entry.get().strip()
+            if not val_str:
+                from tkinter import messagebox
+                messagebox.showerror("金額錯誤", "請先輸入有效的數字金額！")
+                return
+            total = int(val_str)
+            if total <= 0:
+                from tkinter import messagebox
+                messagebox.showerror("金額錯誤", "金額必須大於 0！")
+                return
+                
             mode = self.mode_var.get()
             payer = self.payer_var.get()
             
@@ -215,6 +278,9 @@ class AddTransactionDialog(ctk.CTkToplevel):
             if total > 0 and sel: 
                 self.callback(total, sel, custom_splits, self.desc_entry.get(), self.loc_entry.get(), payer=payer)
                 self.destroy()
+            else:
+                from tkinter import messagebox
+                messagebox.showerror("提交失敗", "請確保金額大於 0 且擁有至少一位參與分帳的成員！")
         except Exception as e:
             print(f"Submit error: {e}")
 

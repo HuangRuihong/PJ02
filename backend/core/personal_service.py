@@ -111,13 +111,17 @@ class PersonalService(BaseService):
             cursor = conn.cursor()
             # 取得該用戶作為 Payer 或是參與者的所有交易
             cursor.execute("""
-                SELECT DISTINCT t.transaction_id, t.group_id, t.amount, t.description, t.timestamp, t.status, t.payer_id
+                SELECT t.transaction_id, t.group_id, t.amount, t.description, t.timestamp, t.status, t.payer_id, 
+                       CASE WHEN t.group_id = 'PERSONAL' THEN '👤 個人私帳' ELSE COALESCE(g.name, t.group_id) END as group_name,
+                       tp.owed_amount
                 FROM transactions t
-                LEFT JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
-                WHERE (t.payer_id = ? OR tp.user_id = ?) AND t.type = 'EXPENSE'
+                JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
+                LEFT JOIN groups g ON t.group_id = g.group_id
+                WHERE tp.user_id = ? AND t.type IN ('EXPENSE', 'SETTLEMENT')
                 ORDER BY t.timestamp DESC
-            """, (user_id, user_id))
-            return [{"id": r[0], "group": r[1], "amount": r[2], "description": r[3], "timestamp": r[4], "status": r[5], "payer_id": r[6]} for r in cursor.fetchall()]
+            """, (user_id,))
+            return [{"id": r[0], "group_id": r[1], "amount": r[2], "description": r[3], "timestamp": r[4], 
+                     "status": r[5], "payer_id": r[6], "group_name": r[7], "my_share": r[8]} for r in cursor.fetchall()]
 
     def get_user_summary(self, user_id):
         """獲取使用者與所有人的債務關係簡要總結"""

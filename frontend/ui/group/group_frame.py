@@ -43,15 +43,16 @@ class GroupFrame(ctk.CTkFrame):
         self.members_label = ctk.CTkLabel(self.members_info, text="成員: 加載中...", font=ctk.CTkFont(size=13), text_color="gray")
         self.members_label.pack(side="left")
         
-        self.scroll = ctk.CTkScrollableFrame(self, label_text="最近活動")
+        ctk.CTkLabel(self, text="最近活動", font=ctk.CTkFont(size=14, weight="bold"), text_color="gray").pack(padx=20, pady=(10,0), anchor="w")
+        self.scroll = ctk.CTkFrame(self)
         self.scroll.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # 右下角預算卡片
+        # 預算卡片：改為在頂部資訊區 pack，避免遮擋長清單
         self.budget_card = ctk.CTkFrame(self, fg_color="#2c3e50", corner_radius=10, border_width=1, border_color="#34495e")
-        self.budget_card.place(relx=0.98, rely=0.98, anchor="se")
+        self.budget_card.pack(fill="x", padx=20, pady=5)
         
-        self.budget_label = ctk.CTkLabel(self.budget_card, text="預算: $0元", font=ctk.CTkFont(size=14, weight="bold"), text_color="#2ecc71")
-        self.budget_label.pack(padx=15, pady=8)
+        self.budget_label = ctk.CTkLabel(self.budget_card, text="預算: 加載中...", font=ctk.CTkFont(size=14, weight="bold"), text_color="#2ecc71")
+        self.budget_label.pack(side="left", padx=15, pady=8)
         
         # 綁定點擊事件以設定預算
         self.budget_card.bind("<Button-1>", lambda e: self.open_set_budget())
@@ -86,7 +87,6 @@ class GroupFrame(ctk.CTkFrame):
         self.settle_btn.grid(row=0, column=3, sticky="ew", padx=4)
         self.export_btn.grid(row=0, column=4, sticky="ew", padx=4)
         self.delete_btn.grid(row=0, column=5, sticky="ew", padx=4)
-        self.budget_card.place(relx=0.98, rely=0.98, anchor="se")
         
         # 載入並顯示成員名單
         members = self.system.get_group_members(gid)
@@ -113,11 +113,14 @@ class GroupFrame(ctk.CTkFrame):
             l.bind("<Double-1>", lambda e, tid=tx['id']: self.show_details(tid))
             
             if current_user in tx['pending_confirmations']:
-                ctk.CTkButton(f, text="確認", width=60, command=lambda tid=tx['id']: self.winfo_toplevel().confirm_tx(tid)).pack(side="right", padx=5)
+                btn_text = "確認收錢" if tx['type'] == 'SETTLEMENT' else "確認"
+                ctk.CTkButton(f, text=btn_text, width=80, command=lambda tid=tx['id']: self.winfo_toplevel().confirm_tx(tid)).pack(side="right", padx=5)
             
             # 只有付款人可以看到「催帳」按鈕來提醒他人
+            # 只有付款人可以看到提醒按鈕
             if current_user == tx['payer'] and tx['pending_confirmations']:
-                ctk.CTkButton(f, text="催帳", width=60, fg_color="#d35400", hover_color="#a04000",
+                remind_text = "提醒確認" if tx['type'] == 'SETTLEMENT' else "催帳"
+                ctk.CTkButton(f, text=remind_text, width=80, fg_color="#d35400", hover_color="#a04000",
                              command=lambda tid=tx['id']: self.handle_notify(tid)).pack(side="right", padx=5)
 
     def open_add_tx(self):
@@ -168,8 +171,8 @@ class GroupFrame(ctk.CTkFrame):
         # 詢問結算模式
         mode_choice = messagebox.askquestion("選擇結算模式", 
             "請選擇結算模式：\n\n"
-            "是 (Yes): 原始債權模式 (保留直接代墊關係)\n"
-            "否 (No): 債務抵銷模式 (群組成員轉帳極小化)\n"
+            "是 (Yes): 逐筆結清 (直接給付)\n"
+            "否 (No): 智慧自動抵銷 (最省事)\n"
             "取消: 中止結算", icon='question', type='yesnocancel')
         
         if mode_choice == 'cancel': return

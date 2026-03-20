@@ -1,6 +1,7 @@
 import random
 import string
 import sqlite3
+import uuid
 from datetime import datetime
 from .base import BaseService
 from .models import TransactionStatus, TransactionType
@@ -245,15 +246,15 @@ class GroupService(BaseService):
                                 (TransactionStatus.SETTLED.name, datetime.now(), tid))
                 
                 for item in settlement_plan:
-                    s_id = f"repay_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
+                    s_id = f"repay_{uuid.uuid4().hex[:8]}"
                     cursor.execute("""
                         INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (s_id, group_id, item['from'], item['amount'], TransactionStatus.SETTLED.name, 
+                    """, (s_id, group_id, item['from'], item['amount'], TransactionStatus.PENDING.name, 
                           TransactionType.SETTLEMENT.name, f"系統自動結算({mode})：還款給 {item['to']}", datetime.now()))
                     
                     cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at) VALUES (?, ?, ?, ?, ?)",
-                                (s_id, item['to'], item['amount'], TransactionStatus.SETTLED.name, datetime.now()))
+                                (s_id, item['to'], item['amount'], TransactionStatus.PENDING.name, None))
                     cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at) VALUES (?, ?, ?, ?, ?)",
                                 (s_id, item['from'], 0, TransactionStatus.SETTLED.name, datetime.now()))
                 conn.commit()
@@ -337,24 +338,24 @@ class GroupService(BaseService):
             try:
                 now = datetime.now()
                 # 1. 建立還款交易主表
-                s_id = f"repay_{now.strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
+                s_id = f"repay_{uuid.uuid4().hex[:8]}"
                 cursor.execute("""
                     INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (s_id, group_id, debtor_id, amount, TransactionStatus.SETTLED.name,
+                """, (s_id, group_id, debtor_id, amount, TransactionStatus.PENDING.name,
                       TransactionType.SETTLEMENT.name, f"手動還款：{debtor_id} 還款給 {creditor_id}", now))
 
-                # 2. 還款交易參與者：收款人
+                # 2. 還款交易參與者：收款人 (設為 PENDING，需要收款人確認)
                 cursor.execute("""
                     INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
                     VALUES (?, ?, ?, ?, ?)
-                """, (s_id, creditor_id, amount, TransactionStatus.SETTLED.name, now))
+                """, (s_id, creditor_id, amount, TransactionStatus.PENDING.name, None))
 
-                # 3. 還款交易參與者：付款人自己
+                # 3. 還款交易參與者：付款人自己 (設為 CONFIRMED)
                 cursor.execute("""
                     INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at)
                     VALUES (?, ?, ?, ?, ?)
-                """, (s_id, debtor_id, 0, TransactionStatus.SETTLED.name, now))
+                """, (s_id, debtor_id, 0, TransactionStatus.CONFIRMED.name, now))
 
                 # 4. 將原帳單中該欠款人的狀態更新為 SETTLED
                 cursor.execute("""
@@ -385,7 +386,7 @@ class GroupService(BaseService):
         if not balances:
             return "目前帳目已全部結清，暫無待處理債務。"
 
-        summary = f"【群組帳單摘要】\n群組 ID: {group_id}\n生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        summary = f"【群組帳單摘要】\n群組名稱: {self._get_group_name(group_id)}\n生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         summary += "-" * 30 + "\n"
         
         # 應收與應付明細
@@ -444,3 +445,11 @@ class GroupService(BaseService):
             msg += " 此筆交易所有參與者已確認。"
             
         return msg
+
+    def _get_group_name(self, group_id):
+        """內部輔助方法：獲取群組名稱"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM groups WHERE group_id = ?", (group_id,))
+            row = cursor.fetchone()
+            return row[0] if row else "未知群組"

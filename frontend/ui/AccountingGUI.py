@@ -155,25 +155,45 @@ class AccountingGUI(ctk.CTk):
         ctk.CTkButton(self.sidebar, text="+ 建立新群組", command=self.open_create_group).pack(pady=5, padx=10, fill="x")
         # "我的 QR 碼" 按鈕已移至 friends_frame.py 中
         
-        # --- 主內容區 (Tabs) ---
+        # --- 主內容區 (兩大綜合分頁) ---
         self.tabview = ctk.CTkTabview(self.main_container)
         self.tabview.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         
-        # 初始化各大功能分頁
-        self.tab_p = PersonalFrame(self.tabview.add("我的帳單"), self.system, self.current_user)
-        self.tab_p.pack(fill="both", expand=True)
+        # ── 1. 個人中心 (帳單 + 好友 + 日曆) ──
+        tab_personal = self.tabview.add("個人中心")
+        scroll_p = ctk.CTkScrollableFrame(tab_personal, fg_color="transparent")
+        scroll_p.pack(fill="both", expand=True)
         
-        self.tab_g = GroupFrame(self.tabview.add("群組動態"), self.system)
-        self.tab_g.pack(fill="both", expand=True)
+        # 初始化個人模組
+        self.tab_p = PersonalFrame(scroll_p, self.system, self.current_user)
+        self.tab_p.pack(fill="x", pady=(0, 30))
         
-        self.tab_f = FriendsFrame(self.tabview.add("我的好友"), self.system, self.current_user)
-        self.tab_f.pack(fill="both", expand=True)
+        # 分隔線
+        ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
         
-        self.tab_a = AnalysisFrame(self.tabview.add("統計報表"), self.system, self.current_user)
-        self.tab_a.pack(fill="both", expand=True)
+        self.tab_f = FriendsFrame(scroll_p, self.system, self.current_user)
+        self.tab_f.pack(fill="x", pady=30)
         
-        self.tab_c = CalendarFrame(self.tabview.add("帳務日曆"), self.system, self.current_user)
-        self.tab_c.pack(fill="both", expand=True)
+        # 分隔線
+        ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
+        
+        self.tab_c = CalendarFrame(scroll_p, self.system, self.current_user)
+        self.tab_c.pack(fill="x", pady=30)
+        
+        # ── 2. 群組中心 (動態 + 報表) ──
+        tab_group = self.tabview.add("群組中心")
+        scroll_g = ctk.CTkScrollableFrame(tab_group, fg_color="transparent")
+        scroll_g.pack(fill="both", expand=True)
+        
+        # 初始化群組模組
+        self.tab_g = GroupFrame(scroll_g, self.system)
+        self.tab_g.pack(fill="x", pady=(0, 30))
+        
+        # 分隔線
+        ctk.CTkFrame(scroll_g, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
+        
+        self.tab_a = AnalysisFrame(scroll_g, self.system, self.current_user)
+        self.tab_a.pack(fill="x", pady=30)
 
     def load_initial_data(self, target_gid=None):
         """初始數據載入：取得使用者所屬群組並設定首個群組"""
@@ -320,7 +340,7 @@ class AccountingGUI(ctk.CTk):
 
     def quick_charge(self, fid): 
         """快速向特定好友發起記帳"""
-        self.tabview.set("群組動態")
+        self.tabview.set("群組中心")
         self.open_add_tx(force_participant=fid)
 
 if __name__ == "__main__":

@@ -28,8 +28,13 @@ class CalendarFrame(ctk.CTkFrame):
         self.cal.bind("<<CalendarSelected>>", self.on_date_select)
         
         # 該日明細
-        self.detail_scroll = ctk.CTkScrollableFrame(self, label_text="選定日期交易明細")
-        self.detail_scroll.grid(row=2, column=0, pady=10, padx=20, sticky="nsew")
+        self.detail_label = ctk.CTkLabel(self, text="選定日期交易明細", font=ctk.CTkFont(size=14, weight="bold"), text_color="gray")
+        self.detail_label.grid(row=2, column=0, pady=(10,0), padx=20, sticky="w")
+        self.detail_scroll = ctk.CTkFrame(self)
+        self.detail_scroll.grid(row=3, column=0, pady=(0,10), padx=20, sticky="nsew")
+        
+        # 修正 grid 權重以因應新 row
+        self.grid_rowconfigure(3, weight=1)
 
     def on_date_select(self, event=None):
         self.refresh()
@@ -51,8 +56,9 @@ class CalendarFrame(ctk.CTkFrame):
         # 清空舊畫面
         for w in self.detail_scroll.winfo_children(): w.destroy()
         
-        # 設定捲軸標題顯示日期
-        self.detail_scroll.configure(label_text=f"📅 {display_date} 交易明細")
+        # 設定標題顯示日期
+        if hasattr(self, 'detail_label'):
+            self.detail_label.configure(text=f"📅 {display_date} 交易明細")
         
         # 取得整體歷史紀錄並排序
         txs = self.system.get_personal_history(self.current_user)

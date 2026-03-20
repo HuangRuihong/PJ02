@@ -41,8 +41,9 @@ class FriendsFrame(ctk.CTkFrame):
                                           command=self.open_add_friend_dialog)
         self.add_friend_btn.pack(side="left", padx=5)
         
-        # 建立放好友卡片的大捲軸
-        self.scroll = ctk.CTkScrollableFrame(self, label_text="好友關係一覽")
+        # 建立放好友卡片的容器 (不具備捲軸，由外層主分頁控制)
+        ctk.CTkLabel(self, text="好友關係一覽", font=ctk.CTkFont(size=14, weight="bold"), text_color="gray").pack(padx=20, pady=(10,0), anchor="w")
+        self.scroll = ctk.CTkFrame(self)
         self.scroll.pack(fill="both", expand=True, padx=20, pady=10)
 
     def load_real_data(self):

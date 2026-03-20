@@ -14,8 +14,8 @@ class PersonalFrame(ctk.CTkFrame):
         self.system = system
         self.current_user = current_user
         
-        # 建立大捲軸容器，讓畫面滿了可以往下滾
-        self.main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        # 將原捲軸容器改為普通容器，由最外層主分頁捲動
+        self.main_scroll = ctk.CTkFrame(self, fg_color="transparent")
         self.main_scroll.pack(fill="both", expand=True, padx=10, pady=10)
         
         # 標題

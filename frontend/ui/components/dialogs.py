@@ -106,7 +106,6 @@ class AddTransactionDialog(ctk.CTkToplevel):
     # 使用中文字串作為內部模式識別 key，避免 CTkSegmentedButton 的 variable 與 values 不一致問題
     MODE_EQUAL        = "平均分帳"
     MODE_CUSTOM       = "手動自訂"
-    MODE_CONTRIBUTION = "預交公費"
     MODE_PRIVATE      = "個人私帳"
 
     def __init__(self, parent, members, callback, pre_selected=None):
@@ -170,7 +169,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
         self.mode_var = ctk.StringVar(value=self.MODE_EQUAL)
         self.mode_switch = ctk.CTkSegmentedButton(
             self.extra_frame,
-            values=[self.MODE_EQUAL, self.MODE_CUSTOM, self.MODE_CONTRIBUTION, self.MODE_PRIVATE],
+            values=[self.MODE_EQUAL, self.MODE_CUSTOM, self.MODE_PRIVATE],
             command=self.toggle_mode,
             variable=self.mode_var
         )
@@ -228,15 +227,11 @@ class AddTransactionDialog(ctk.CTkToplevel):
         hints = {
             self.MODE_EQUAL:        "自動依人數均分，餘數分配給排序靠前的成員。",
             self.MODE_CUSTOM:       "勾選參與者後，手動輸入各人應付金額。",
-            self.MODE_CONTRIBUTION: "請於下方勾選一位【保管人】，其他欄位自動鎖定。",
             self.MODE_PRIVATE:      "僅記錄於個人帳單，不計入群組分帳。",
         }
         self.mode_hint.configure(text=hints.get(mode, ""))
         for m, cb in self.check_boxes.items():
-            if mode == self.MODE_CONTRIBUTION:
-                cb.configure(command=lambda member=m: self._on_contribution_check(member))
-            else:
-                cb.configure(command=self.auto_split)
+            cb.configure(command=self.auto_split)
         self.auto_split()
 
     def auto_split(self, _=None):
@@ -255,17 +250,6 @@ class AddTransactionDialog(ctk.CTkToplevel):
                     ent.configure(state="readonly")
                 self._update_balance_label(total, total)
                 self.scroll.configure(label_text="分帳成員")
-                return
-
-            if mode == self.MODE_CONTRIBUTION:
-                self.scroll.configure(label_text="選擇保管人（僅選一人）")
-                for m, v in self.check_vars.items():
-                    ent = self.split_entries[m]
-                    ent.configure(state="normal")
-                    ent.delete(0, "end")
-                    ent.insert(0, str(total) if v.get() == 1 else "0")
-                    ent.configure(state="readonly")
-                self._update_balance_label(total, total)
                 return
 
             self.scroll.configure(label_text="分帳成員")
@@ -312,13 +296,6 @@ class AddTransactionDialog(ctk.CTkToplevel):
         else:
             self.balance_label.configure(text=f"❌ 超出分配 ${abs(diff)}（已分 ${assigned} / 總額 ${total}）", text_color="#e74c3c")
 
-    def _on_contribution_check(self, selected_member):
-        """預交公費模式：單選互斥"""
-        for m, v in self.check_vars.items():
-            if m != selected_member:
-                v.set(0)
-        self.auto_split()
-
     def submit(self):
         """提交交易數據到主程式"""
         try:
@@ -344,18 +321,6 @@ class AddTransactionDialog(ctk.CTkToplevel):
             # ── 個人私帳 ──────────────────────────────────
             if mode == self.MODE_PRIVATE:
                 self.callback(total, [payer], {payer: total}, desc, loc, is_private=True, payer=payer, date=final_date)
-                self.destroy()
-                return
-
-            # ── 預交公費 ──────────────────────────────────
-            if mode == self.MODE_CONTRIBUTION:
-                sel = [m for m, v in self.check_vars.items() if v.get() == 1]
-                if len(sel) != 1:
-                    from tkinter import messagebox
-                    messagebox.showerror("選擇錯誤", "「預交公費」模式請僅勾選一位成員作為保管人。")
-                    return
-                holder = sel[0]
-                self.callback(total, [holder], {holder: total}, desc, loc, tx_type="CONTRIBUTION", payer=payer, date=final_date)
                 self.destroy()
                 return
 

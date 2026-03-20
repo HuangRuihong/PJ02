@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ..components.dialogs import TransactionDetailDialog
 
 class PersonalFrame(ctk.CTkFrame):
     def __init__(self, parent, system, current_user):
@@ -100,16 +101,11 @@ class PersonalFrame(ctk.CTkFrame):
 
     def refresh(self):
         """刷新畫面，每次點擊到這個「我的帳單」分頁時都會呼叫"""
-        
-        # 1. 載入真實庫資料
-        self.load_real_data()
-        
-        # 2. 為了避免重複疊加畫面，畫新介面前先把舊的元件刪掉
+        # 清除舊元件後重新繪製各區塊
         for w in self.dashboard_frame.winfo_children(): w.destroy()
         for w in self.inbox_frame.winfo_children(): w.destroy()
         for w in self.history_frame.winfo_children(): w.destroy()
         
-        # 3. 呼叫三個方法來把自己負責的區塊畫上去
         self.build_dashboard()
         self.build_inbox()
         self.build_history()
@@ -213,8 +209,17 @@ class PersonalFrame(ctk.CTkFrame):
             hf.pack(fill="x", pady=2)
             hf.grid_columnconfigure(2, weight=1) # 讓描述這欄自動拉伸
             
+            # 使用跟隊友一致的 YYYY/MM/DD 格式
+            if isinstance(item['timestamp'], str):
+                try:
+                    dt = datetime.strptime(item['timestamp'][:10], '%Y-%m-%d')
+                    date_str = dt.strftime('%Y/%m/%d')
+                except:
+                    date_str = item['timestamp'][:10].replace('-', '/')
+            else:
+                date_str = item['timestamp'].strftime('%Y/%m/%d')
+
             # 1. 日期欄 (固定寬度)
-            date_str = item['timestamp'][:10] if isinstance(item['timestamp'], str) else item['timestamp'].strftime('%Y-%m-%d')
             ctk.CTkLabel(hf, text=date_str, width=100, anchor="w").grid(row=0, column=0, padx=5, sticky="w")
             
             # 2. 群組標籤 (固定寬度)
@@ -237,11 +242,28 @@ class PersonalFrame(ctk.CTkFrame):
             amt_info.grid(row=0, column=3, padx=10, sticky="e")
             
             if is_payer:
-                # 我付錢：顯示總額 & 他人欠我 (總額 - 我那份)
                 others_owe = total_amt - my_share
                 ctk.CTkLabel(amt_info, text=f"總額 ${total_amt} (應收回 ${others_owe})", 
                              text_color="#2ecc71", font=ctk.CTkFont(weight="bold"), anchor="e").pack(anchor="e")
             else:
-                # 被分帳：顯示總額 & 我要付
                 ctk.CTkLabel(amt_info, text=f"總額 ${total_amt} (應付 ${my_share})", 
                              text_color="#e74c3c", font=ctk.CTkFont(weight="bold"), anchor="e").pack(anchor="e")
+
+            # ── 整合隊友的：點擊查看明細功能 ──
+            click_btn = ctk.CTkButton(hf, text="", fg_color="transparent", hover_color="#2c2c2c", 
+                                     command=lambda tid=item['id']: self.show_detail(tid))
+            click_btn.place(relx=0, rely=0, relwidth=1, relheight=1)
+            # 提升 Label 層級使其顯示在按鈕上
+            for child in hf.winfo_children():
+                if child != click_btn: child.lift()
+
+    def show_detail(self, tid):
+        """顯示交易詳情彈窗 (由隊友實作)"""
+        details = self.system.get_transaction_details(tid)
+        if details:
+            TransactionDetailDialog(
+                self.winfo_toplevel(), details,
+                system=self.system,
+                current_user=self.current_user,
+                refresh_cb=self.winfo_toplevel().refresh_ui
+            )

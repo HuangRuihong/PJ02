@@ -1,12 +1,16 @@
 @echo off
-rem 移動到專案根目錄 (即 c:\PJ02\mysalf)
-pushd "%~dp0.."
 chcp 65001 >nul
+setlocal
+echo [啟動中] 正在啟動群組分帳系統 (Group Ledger)...
+
+pushd "%~dp0.."
+set PYTHONPATH=%CD%
 python run.py
-if %errorlevel% neq 0 (
+if %ERRORLEVEL% neq 0 (
     echo.
-    echo [錯誤] 啟動 mysalf 失敗。
-    echo 請確保 Python 已安裝且位在環境變數或執行 pip install -r requirements.txt。
+    echo [錯誤] 系統執行中斷或啟動失敗。
+    echo 請確認已執行: pip install -r requirements.txt
     pause
 )
 popd
+endlocal

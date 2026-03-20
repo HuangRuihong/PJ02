@@ -78,6 +78,7 @@ class AnalysisFrame(ctk.CTkFrame):
         plt.tight_layout()
         canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
         canvas.draw()
+        plt.close(fig)  # 釋放 matplotlib 記憶體，避免切換分頁時持續累積
         canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def show_group_stats(self, group_id):
@@ -118,4 +119,5 @@ class AnalysisFrame(ctk.CTkFrame):
         plt.tight_layout()
         canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
         canvas.draw()
+        plt.close(fig)  # 釋放 matplotlib 記憶體
         canvas.get_tk_widget().pack(fill="both", expand=True)

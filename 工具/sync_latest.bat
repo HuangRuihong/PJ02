@@ -1,19 +1,21 @@
 @echo off
-pushd "%~dp0"
 chcp 65001 >nul
+echo [同步] 正在從雲端同步最新代碼...
 
-echo [1/3] 正在從 Git 拉取更新...
+pushd "%~dp0.."
 git pull origin master
-
-if %errorlevel% neq 0 (
-    echo [錯誤] 拉取失敗。
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [錯誤] Git 同步失敗，請手動檢查網絡或衝突。
     pause
-    exit /b
+    exit /b %ERRORLEVEL%
 )
 
-echo [2/3] 正在更新資料庫...
-call update_db.bat
+echo.
+echo [更新] 正在執行資料庫檢查...
+call 工具\update_db.bat
 
-echo [3/3] 完成。
-pause
+echo.
+echo [完成] 同步與更新作業結束。
 popd
+pause

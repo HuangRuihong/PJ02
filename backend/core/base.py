@@ -25,7 +25,8 @@ class BaseService:
                 CREATE TABLE IF NOT EXISTS groups (
                     group_id TEXT PRIMARY KEY, 
                     name TEXT NOT NULL,
-                    join_code TEXT
+                    join_code TEXT,
+                    budget INTEGER DEFAULT 0
                 )
             """)
             # 2. 群組成員表

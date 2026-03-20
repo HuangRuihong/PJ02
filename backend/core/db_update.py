@@ -9,8 +9,9 @@ def get_db_path():
 def update_schema():
     db_path = get_db_path()
     if not os.path.exists(db_path):
-        print(f"資料庫檔案不存在：{db_path}，將由系統啟動時自動建立。")
-        return
+        print(f"Database file not found: {db_path}")
+        print("Please run the main application first to initialize the database.")
+        sys.exit(1)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -38,9 +39,11 @@ def update_schema():
             cursor.execute("ALTER TABLE transactions ADD COLUMN location TEXT")
             
         conn.commit()
-        print("資料庫結構校驗完成。")
+        print("[OK] 資料庫結構校驗完成。")
+        sys.exit(0)
     except Exception as e:
-        print(f"更新資料庫時發生錯誤：{e}")
+        print(f"[ERROR] 更新資料庫時發生錯誤：{e}")
+        sys.exit(1)
     finally:
         conn.close()
 

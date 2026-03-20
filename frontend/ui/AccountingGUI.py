@@ -222,19 +222,25 @@ class AccountingGUI(ctk.CTk):
         JoinGroupDialog(self, self.join_group_cb)
 
     def join_group_cb(self, code):
-        """加入群組成功後的回調"""
+        """加入群組成功後的回調處理"""
         if self.system.join_group_by_code(self.current_user, code): 
+            mbox.showinfo("成功", f"已成功加入群組碼: {code}")
             self.load_initial_data()
+        else:
+            mbox.showerror("失敗", "找不到該群組，或是您已在群組中。")
 
     def open_create_group(self): 
         """開啟建立群組視窗"""
         CreateGroupDialog(self, self.create_group_cb)
 
     def create_group_cb(self, name):
-        """建立群組成功後的回調"""
-        gid, _ = self.system.create_group_with_code(self.current_user, name)
+        """建立群組成功後的回調處理"""
+        gid, code = self.system.create_group_with_code(self.current_user, name)
         if gid: 
+            mbox.showinfo("群組已建立", f"成功建立群組: {name}\n邀群碼: {code}")
             self.load_initial_data(target_gid=gid)
+        else:
+            mbox.showerror("錯誤", "建立群組時發生未知錯誤。")
 
     def open_global_add_tx(self):
         """側邊欄全局快速記帳：直接與當前群組功能綁定"""
@@ -251,7 +257,7 @@ class AccountingGUI(ctk.CTk):
         mems = self.system.get_group_members(self.current_group_id)
         AddTransactionDialog(self, mems, self.add_tx_cb, pre_selected=force_participant)
 
-    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None):
+    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None):
         """交易對話框提交後的回調"""
         tid = f"tx_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
@@ -264,7 +270,10 @@ class AccountingGUI(ctk.CTk):
         # 若無指定付款人，預設為當前登入者
         actual_payer = payer if payer else self.current_user
 
-        if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc): 
+        # 若無指定日期，預設為現在
+        actual_date = date if date else datetime.now()
+
+        if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc, timestamp=actual_date): 
             self.refresh_ui()
 
     def confirm_tx(self, tid): 

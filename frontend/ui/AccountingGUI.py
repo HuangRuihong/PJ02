@@ -271,7 +271,12 @@ class AccountingGUI(ctk.CTk):
         actual_payer = payer if payer else self.current_user
 
         # 若無指定日期，預設為現在
-        actual_date = date if date else datetime.now()
+        # 若有指定日期，加上當前時間以利排序；若無指定則用現在
+        if date:
+             now = datetime.now()
+             actual_date = f"{date} {now.strftime('%H:%M:%S')}"
+        else:
+             actual_date = datetime.now()
 
         if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc, timestamp=actual_date): 
             self.refresh_ui()

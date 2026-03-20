@@ -35,41 +35,72 @@ class CalendarFrame(ctk.CTkFrame):
         self.refresh()
 
     def refresh(self, group_id=None):
-        # 日曆改為顯示使用者的整體歷史紀錄 (不侷限於單一群組)
-        selected_date = self.cal.get_date()
+        """刷新日曆分頁，顯示目前點選日期的所有帳務紀錄"""
+        # 使用 selection_get() 直接取得 date 物件，避免字串解析失敗
         try:
-            date_obj = datetime.strptime(selected_date, '%m/%d/%y')
-            search_date = date_obj.strftime('%Y-%m-%d')
-            display_date = date_obj.strftime('%Y/%m/%d')
+            selected_date = self.cal.selection_get()
+            search_date = selected_date.strftime('%Y-%m-%d')
+            display_date = selected_date.strftime('%Y/%m/%d')
         except:
-            search_date = selected_date
-            display_date = selected_date
+            # 備用方案：若尚未點選任何日期，預設為今天
+            from datetime import date
+            selected_date = date.today()
+            search_date = selected_date.strftime('%Y-%m-%d')
+            display_date = selected_date.strftime('%Y/%m/%d')
             
+        # 清空舊畫面
         for w in self.detail_scroll.winfo_children(): w.destroy()
         
+        # 設定捲軸標題顯示日期
+        self.detail_scroll.configure(label_text=f"📅 {display_date} 交易明細")
+        
+        # 取得整體歷史紀錄並排序
         txs = self.system.get_personal_history(self.current_user)
+        txs.sort(key=lambda x: str(x['timestamp']), reverse=True)
+        
         found = False
         for tx in txs:
-            # 篩選該日期的交易 (SQLite 存儲通常為 YYYY-MM-DD...)
-            if str(tx["timestamp"]).startswith(search_date):
+            # 判斷是否為該日交易 (timestamp 前 10 個字元為 YYYY-MM-DD)
+            ts = str(tx["timestamp"])
+            if ts.startswith(search_date):
                 found = True
-                f = ctk.CTkFrame(self.detail_scroll); f.pack(fill="x", pady=2, padx=5)
-                payer_text = "你付了" if tx.get('payer_id') == self.current_user else f"{tx.get('payer_id')} 付了"
-                ctk.CTkLabel(f, text=f"{tx['description'] if tx['description'] else '無描述'}", width=150, anchor="w").pack(side="left", padx=10)
-                ctk.CTkLabel(f, text=f"{payer_text} ${tx['amount']}", width=150).pack(side="left", padx=10)
+                # 建立交易卡片列 (比照 PersonalFrame 網格化)
+                f = ctk.CTkFrame(self.detail_scroll, fg_color="#2c3e50" if tx.get('status') != 'SETTLED' else "transparent")
+                f.pack(fill="x", pady=2, padx=5)
+                f.grid_columnconfigure(1, weight=1) # 描述欄位拉伸
+                
+                # 1. 群組標籤 (小小的灰色)
+                group_name = tx.get('group_name', '一般')
+                ctk.CTkLabel(f, text=f"[{group_name}]", font=ctk.CTkFont(size=12)).grid(row=0, column=0, padx=10, pady=10, sticky="w")
+                
+                # 2. 描述
+                ctk.CTkLabel(f, text=tx['description'] or "一般支出", font=ctk.CTkFont(size=14), anchor="w").grid(row=0, column=1, padx=5, sticky="ew")
+                
+                # 3. 金額明細
+                is_payer = (tx.get('payer_id') == self.current_user)
+                amt_color = "#2ecc71" if is_payer else "#e74c3c"
+                amt_text = f"+${tx['amount']}" if is_payer else f"-${tx['amount']}"
+                
+                amt_frame = ctk.CTkFrame(f, fg_color="transparent")
+                amt_frame.grid(row=0, column=2, padx=15, sticky="e")
+                
+                ctk.CTkLabel(amt_frame, text=amt_text, text_color=amt_color, font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="e")
+                
                 status_map = {"CONFIRMED": "已確認", "PENDING": "待確認", "SETTLED": "已結清", "REJECTED": "已拒絕"}
                 status_text = status_map.get(tx['status'], tx['status'])
-                ctk.CTkLabel(f, text=status_text, text_color="#3498db").pack(side="right", padx=10)
+                ctk.CTkLabel(amt_frame, text=status_text, font=ctk.CTkFont(size=11), text_color="gray").pack(anchor="e")
 
-                # 使整列可點擊
-                click_btn = ctk.CTkButton(f, text="", fg_color="transparent", hover_color="#2c2c2c", 
+                # 4. 透明點擊層
+                click_btn = ctk.CTkButton(f, text="", fg_color="transparent", hover_color="#34495e", 
                                          command=lambda tid=tx['id']: self.show_detail(tid))
                 click_btn.place(relx=0, rely=0, relwidth=1, relheight=1)
+                
+                # 提升所有標籤層級以避免被透明按鈕完全擋住點擊後的視覺回饋 (選用)
                 for child in f.winfo_children():
                     if child != click_btn: child.lift()
 
         if not found:
-            ctk.CTkLabel(self.detail_scroll, text="該日無相關的交易記錄").pack(pady=20)
+            ctk.CTkLabel(self.detail_scroll, text="該日無任何交易明細記錄", text_color="gray").pack(pady=30)
 
     def show_detail(self, tid):
         """顯示交易詳情彈窗"""

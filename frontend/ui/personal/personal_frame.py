@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from datetime import datetime
 from ..components.dialogs import TransactionDetailDialog
 
 class PersonalFrame(ctk.CTkFrame):
@@ -101,7 +102,10 @@ class PersonalFrame(ctk.CTkFrame):
 
     def refresh(self):
         """刷新畫面，每次點擊到這個「我的帳單」分頁時都會呼叫"""
-        # 清除舊元件後重新繪製各區塊
+        # 1. 先抓取最新資料
+        self.load_real_data()
+        
+        # 2. 清除舊元件後重新繪製各區塊
         for w in self.dashboard_frame.winfo_children(): w.destroy()
         for w in self.inbox_frame.winfo_children(): w.destroy()
         for w in self.history_frame.winfo_children(): w.destroy()
@@ -203,6 +207,10 @@ class PersonalFrame(ctk.CTkFrame):
         if not history:
             ctk.CTkLabel(self.history_frame, text="尚無任何歷史紀錄。", text_color="gray").pack(pady=10)
             return
+
+        # 確保排序：最新在最上方 (降序)
+        # 有些可能是字串有些是 datetime，統一轉字串比較穩定
+        history.sort(key=lambda x: str(x['timestamp']), reverse=True)
 
         for item in history[:20]: # 僅顯示前 20 筆
             hf = ctk.CTkFrame(self.history_frame, fg_color="transparent")

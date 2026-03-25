@@ -430,7 +430,7 @@ class GroupService(BaseService):
         details = self.get_transaction_details(tx_id)
         if not details: return "交易資訊不存在。"
         
-        msg = f"【mysalf 帳務提醒】\n"
+        msg = f"【group ledger 系統後端邏輯層帳務提醒】\n"
         msg += f"項目：{details['desc'] or '未命名支出'}\n"
         msg += f"金額：${details['amount']}\n"
         msg += f"付款人：{details['payer']}\n"

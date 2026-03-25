@@ -13,7 +13,7 @@
     ```bash
     git clone https://github.com/HuangRuihong/PJ02.git
     ```
-3.  **安裝必要套件**：進入 `mysalf` 資料夾後執行：
+3.  **安裝必要套件**：進入 `group ledger` 資料夾後執行：
     ```bash
     pip install -r requirements.txt
     ```

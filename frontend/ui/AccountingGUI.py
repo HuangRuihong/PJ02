@@ -32,10 +32,10 @@ CONFIG_PATH = "backend/data/config.json"
 
 
 class AccountingGUI(ctk.CTk):
-    """主程式類別：驅動整個 mysalf 系統的 GUI 核心"""
+    """主程式類別：驅動整個 group ledger 系統的 GUI 核心"""
     def __init__(self):
         super().__init__()
-        self.title("mysalf - 多人群組本地記帳系統")
+        self.title("group ledger - 多人群組本地記帳系統")
         self.geometry("1150x900")
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")

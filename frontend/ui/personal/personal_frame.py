@@ -51,10 +51,23 @@ class PersonalFrame(ctk.CTkFrame):
         self.pending_inbox = []
         for d in debts:
             if d['status'] == 'PENDING':
+                # 統一處理日期格式為 YYYY/MM/DD
+                raw_date = str(d['date'])
+                try:
+                    dt = datetime.fromisoformat(raw_date) if " " in raw_date or "T" in raw_date else datetime.strptime(raw_date[:10], '%Y-%m-%d')
+                    date_str = dt.strftime('%Y/%m/%d')
+                except:
+                    date_str = raw_date[:10].replace('-', '/')
+
                 self.pending_inbox.append({
-                    "id": d['tx_id'], "payer": d['creditor'], "desc": d['desc'],
-                    "amount": d['amount'], "date": str(d['date'])[:10], "status": "Pending",
-                    "type": d.get('type'), "loc": d.get('loc')
+                    "id": d['tx_id'], 
+                    "payer": d['creditor'], 
+                    "desc": d['desc'] or "一般支出",
+                    "amount": d['amount'], 
+                    "time": date_str,  # 配合 build_inbox 使用 time 欄位
+                    "status": "PENDING",
+                    "type": d.get('type'), 
+                    "loc": d.get('loc')
                 })
                 
         # 3. 個人歷史流水紀錄
@@ -153,17 +166,8 @@ class PersonalFrame(ctk.CTkFrame):
         """畫出第二區塊：待確認的通知匣 (Pending Inbox)"""
         ctk.CTkLabel(self.inbox_frame, text="待辦事項 (需要你驗證的帳款)", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
         
-        # 從真實後端獲取待確認交易
-        # 我們掃描所有群組與私帳中，當前使用者狀態為 PENDING 的項目
-        pending_items = []
-        groups = self.system.get_user_groups(self.current_user)
-        target_gids = [g['id'] for g in groups] + ["PERSONAL"]
-        
-        for gid in target_gids:
-            txs = self.system.get_group_transactions(gid)
-            for tx in txs:
-                if self.current_user in tx['pending_confirmations']:
-                    pending_items.append(tx)
+        # 優化：直接使用 load_real_data 預先抓取的資料，避免重複向資料庫發起低效查詢
+        pending_items = self.pending_inbox
 
         if not pending_items:
             ctk.CTkLabel(self.inbox_frame, text="目前沒有需要驗證的帳款喔！", text_color="gray").pack(pady=10)

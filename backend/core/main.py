@@ -81,8 +81,12 @@ class DebtSystem(PersonalService, GroupService):
                 SELECT tp.user_id, tp.owed_amount, t.payer_id, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
-                WHERE t.group_id = ? AND tp.status IN (?, ?)
-            """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name))
+                WHERE t.group_id = ? 
+                  AND t.status IN (?, ?) 
+                  AND tp.status IN (?, ?)
+            """, (group_id, 
+                  TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name,
+                  TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name))
             
             for debtor_id, amount, payer_id, tx_type in cursor.fetchall():
                 if debtor_id != payer_id:

@@ -5,6 +5,7 @@ import json
 import threading
 import time
 import schedule
+import uuid
 from datetime import datetime
 from PIL import Image
 import tkinter.filedialog as fd
@@ -111,16 +112,15 @@ class AccountingGUI(ctk.CTk):
         for w in self.main_container.winfo_children(): w.destroy()
         self.setup_ui()
         self.load_initial_data()
-        self.after(1000, self.check_overdue_and_remind) # 延遲一秒顯示逾期提醒
+        self.after(1000, self.check_overdue_and_remind)
 
     def check_overdue_and_remind(self):
         """啟動檢查逾期帳務並彈窗提醒"""
         overdue = self.system.check_overdue_transactions()
-        # 過濾出與當前使用者相關的 (或是全部提醒)
         my_overdue = [o for o in overdue if o["user"] == self.current_user]
         if my_overdue:
             msg = "逾期未處理提醒\n\n"
-            for o in my_overdue[:5]: # 最多顯示 5 筆
+            for o in my_overdue[:5]:
                 msg += f"- {o['desc']} (金額: {o['amount']}, 已逾期 {o['days']} 天)\n"
             if len(my_overdue) > 5: msg += "...等更多項目\n"
             msg += "\n請盡速至「我的帳單」或相關群組進行確認與結清。"
@@ -128,7 +128,6 @@ class AccountingGUI(ctk.CTk):
 
     def setup_ui(self):
         """建構主畫面佈局：側邊欄與分頁系統"""
-        # --- 側邊欄 (Sidebar) ---
         self.sidebar = ctk.CTkFrame(self.main_container, width=200, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         
@@ -140,7 +139,6 @@ class AccountingGUI(ctk.CTk):
                                     text_color="#e74c3c", hover_color="#2c2c2c", height=28)
         self.logout_btn.pack(pady=(0, 25), padx=20)
         
-        # 全局快速記帳按鈕
         self.quick_add_btn = ctk.CTkButton(self.sidebar, text="快速記帳 (Quick Add)", 
                                         command=self.open_global_add_tx,
                                         fg_color="#3498db", hover_color="#2980b9", height=45, font=ctk.CTkFont(weight="bold"))
@@ -153,43 +151,34 @@ class AccountingGUI(ctk.CTk):
         
         ctk.CTkButton(self.sidebar, text="+ 加入群組", command=self.open_join_group).pack(pady=5, padx=10, fill="x")
         ctk.CTkButton(self.sidebar, text="+ 建立新群組", command=self.open_create_group).pack(pady=5, padx=10, fill="x")
-        # "我的 QR 碼" 按鈕已移至 friends_frame.py 中
         
-        # --- 主內容區 (兩大綜合分頁) ---
         self.tabview = ctk.CTkTabview(self.main_container)
         self.tabview.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         
-        # ── 1. 個人中心 (帳單 + 好友 + 日曆) ──
         tab_personal = self.tabview.add("個人中心")
         scroll_p = ctk.CTkScrollableFrame(tab_personal, fg_color="transparent")
         scroll_p.pack(fill="both", expand=True)
         
-        # 初始化個人模組
         self.tab_p = PersonalFrame(scroll_p, self.system, self.current_user)
         self.tab_p.pack(fill="x", pady=(0, 30))
         
-        # 分隔線
         ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
         
         self.tab_f = FriendsFrame(scroll_p, self.system, self.current_user)
         self.tab_f.pack(fill="x", pady=30)
         
-        # 分隔線
         ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
         
         self.tab_c = CalendarFrame(scroll_p, self.system, self.current_user)
         self.tab_c.pack(fill="x", pady=30)
         
-        # ── 2. 群組中心 (動態 + 報表) ──
         tab_group = self.tabview.add("群組中心")
         scroll_g = ctk.CTkScrollableFrame(tab_group, fg_color="transparent")
         scroll_g.pack(fill="both", expand=True)
         
-        # 初始化群組模組
         self.tab_g = GroupFrame(scroll_g, self.system)
         self.tab_g.pack(fill="x", pady=(0, 30))
         
-        # 分隔線
         ctk.CTkFrame(scroll_g, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
         
         self.tab_a = AnalysisFrame(scroll_g, self.system, self.current_user)
@@ -199,7 +188,6 @@ class AccountingGUI(ctk.CTk):
         """初始數據載入：取得使用者所屬群組並設定首個群組"""
         groups = self.system.get_user_groups(self.current_user)
         if groups:
-            # 優先切換至指定的群組 ID，否則切換至清單第一個
             g = next((x for x in groups if x["id"] == target_gid), groups[0])
             self.current_group_id, self.current_group_name, self.current_group_code = g["id"], g["name"], g["code"]
         else:
@@ -215,7 +203,6 @@ class AccountingGUI(ctk.CTk):
         self.group_opt.configure(values=names)
         
         if names:
-            # 確保選單顯示當前選擇的群組名稱
             if self.current_group_name in names:
                 self.group_opt.set(self.current_group_name)
             else:
@@ -223,7 +210,6 @@ class AccountingGUI(ctk.CTk):
         else:
             self.group_opt.set("(尚無群組)")
         
-        # 分別呼叫各個分頁的 refresh 方法
         self.tab_p.refresh()
         self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
         self.tab_f.refresh()
@@ -266,10 +252,8 @@ class AccountingGUI(ctk.CTk):
         """側邊欄全局快速記帳：直接與當前群組功能綁定"""
         if not self.current_group_id:
             from tkinter import messagebox
-            # 若無群組，提醒使用者先選擇或去好友分頁發起私帳
             messagebox.showwarning("提示", "請先選擇右上角群組，或進入好友卡片點擊發起私帳！")
             return
-        # 直接呼叫與群組分頁相同的「記一筆」邏輯
         self.open_add_tx()
 
     def open_add_tx(self, force_participant=None):
@@ -279,22 +263,22 @@ class AccountingGUI(ctk.CTk):
 
     def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None):
         """交易對話框提交後的回調"""
-        tid = f"tx_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # 根據是否為私帳模式決定目標群組
+        # 使用 UUID 替代純時間戳，避免高頻操作衝突
+        tid = f"tx_{uuid.uuid4().hex[:12]}"
         target_gid = "PERSONAL" if is_private else self.current_group_id
         
-        # 安全檢查：若非私帳且無當前群組，則轉為私帳 (防止邊際案例)
         if not target_gid: target_gid = "PERSONAL"
-        
-        # 若無指定付款人，預設為當前登入者
         actual_payer = payer if payer else self.current_user
 
-        # 若無指定日期，預設為現在
-        # 若有指定日期，加上當前時間以利排序；若無指定則用現在
+        # 統一處理時間戳：若有指定日期則轉為 datetime 物件並包含當前時刻
         if date:
-             now = datetime.now()
-             actual_date = f"{date} {now.strftime('%H:%M:%S')}"
+             try:
+                 # date 預期格式為 YYYY-MM-DD
+                 d = datetime.strptime(date, "%Y-%m-%d")
+                 now = datetime.now()
+                 actual_date = d.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+             except Exception:
+                 actual_date = datetime.now()
         else:
              actual_date = datetime.now()
 
@@ -324,7 +308,6 @@ class AccountingGUI(ctk.CTk):
             return
         p = fd.askopenfilename()
         if p:
-            # 修正 OpenCV 無法直接透過 imread 讀取中文路徑的問題
             img = cv2.imdecode(np.fromfile(p, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
             objs = decode(img)
             if objs:
@@ -344,6 +327,5 @@ class AccountingGUI(ctk.CTk):
         self.open_add_tx(force_participant=fid)
 
 if __name__ == "__main__":
-    # 啟動應用程式
     app = AccountingGUI()
     app.mainloop()

@@ -12,7 +12,7 @@ class GroupService(BaseService):
     def create_group_with_code(self, creator_id, group_name):
         """建立群組並產生 6 位英數邀群碼"""
         join_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        group_id = f"g_{datetime.now().strftime('%m%d%H%M%S')}"
+        group_id = f"g_{uuid.uuid4().hex[:8]}"
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -128,18 +128,54 @@ class GroupService(BaseService):
         target_status = status if status else TransactionStatus.CONFIRMED.name
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE transaction_participants SET status = ?, settled_at = ? 
-                WHERE transaction_id = ? AND user_id = ? AND status != ?
-            """, (target_status, datetime.now() if target_status == TransactionStatus.SETTLED.name else None, 
-                  transaction_id, user_id, TransactionStatus.SETTLED.name))
+            try:
+                # 1. 更新參與者個別狀態
+                cursor.execute("""
+                    UPDATE transaction_participants SET status = ?, settled_at = ? 
+                    WHERE transaction_id = ? AND user_id = ? AND status != ?
+                """, (target_status, datetime.now() if target_status == TransactionStatus.SETTLED.name else None, 
+                      transaction_id, user_id, TransactionStatus.SETTLED.name))
+                
+                # 2. 自動檢查並更新交易主表狀態 (提取出的核心邏輯)
+                self._update_main_transaction_status(cursor, transaction_id)
+                
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Confirm Error: {e}")
+                conn.rollback()
+                return False
+
+    def _update_main_transaction_status(self, cursor, transaction_id):
+        """核心狀態機：檢查所有參與者，自動提升交易主表狀態 (依優先級判斷)"""
+        # 1. 取得該筆交易目前所有參與者的狀態分佈
+        cursor.execute("""
+            SELECT status FROM transaction_participants 
+            WHERE transaction_id = ?
+        """, (transaction_id,))
+        statuses = [r[0] for r in cursor.fetchall()]
+
+        if not statuses: return
+
+        # 2. 判斷優先級邏輯 (學長建議修正：一票否決制 & 全員結清)
+        # 優先級 1: REJECTED (一票否決)
+        if any(s == TransactionStatus.REJECTED.name for s in statuses):
+            new_main_status = TransactionStatus.REJECTED.name
             
-            cursor.execute("SELECT COUNT(*) FROM transaction_participants WHERE transaction_id = ? AND status NOT IN (?, ?)", (transaction_id, TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name))
-            if cursor.fetchone()[0] == 0:
-                # 若所有人都確認/結清了，將主表狀態同步 (優先設為 SETTLED 如果有人選了這個，或者維持 CONFIRMED)
-                cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (target_status, transaction_id))
-            conn.commit()
-            return True
+        # 優先級 2: PENDING (只要有人還沒確認，就不能進入正式帳單)
+        elif any(s == TransactionStatus.PENDING.name for s in statuses):
+            new_main_status = TransactionStatus.PENDING.name
+            
+        # 優先級 3: 全員 SETTLED (只有全部人都清償了，整筆交易才算結案)
+        elif all(s == TransactionStatus.SETTLED.name for s in statuses):
+            new_main_status = TransactionStatus.SETTLED.name
+            
+        # 優先級 4: CONFIRMED (當所有人都不在 PENDING/REJECTED，但還沒全部還完)
+        else:
+            new_main_status = TransactionStatus.CONFIRMED.name
+
+        # 3. 執行主表狀態同步
+        cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (new_main_status, transaction_id))
 
     def get_group_transactions(self, group_id):
         """獲取群組的所有交易紀錄"""
@@ -363,15 +399,9 @@ class GroupService(BaseService):
                     WHERE transaction_id = ? AND user_id = ?
                 """, (TransactionStatus.SETTLED.name, now, tx_id, debtor_id))
 
-                # 5. 若原帳單所有參與者皆已結算，也一併更新主表狀態
-                cursor.execute("""
-                    SELECT COUNT(*) FROM transaction_participants
-                    WHERE transaction_id = ? AND status != ?
-                """, (tx_id, TransactionStatus.SETTLED.name))
-                remaining = cursor.fetchone()[0]
-                if remaining == 0:
-                    cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?",
-                                   (TransactionStatus.SETTLED.name, tx_id))
+                # 5. 若原帳單所有參與者皆已結算，也一併更新主表狀態 (改用核心狀態機)
+                self._update_main_transaction_status(cursor, tx_id)
+                self._update_main_transaction_status(cursor, s_id)
 
                 conn.commit()
                 return True

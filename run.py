@@ -1,37 +1,18 @@
-import os
 import sys
-import subprocess
+import os
 
-def run():
-    print("="*50)
-    print("group ledger - 多人群組本地記帳系統 啟動程式")
-    print("="*50)
-    
-    print(f"[1/2] 正在檢查 Python 環境: {sys.version.split()[0]}")
-    
-    try:
-        import customtkinter
-        import PIL
-        import qrcode
-        import matplotlib
-        import tkcalendar
-        import schedule
-    except ImportError as e:
-        print(f"\n[錯誤] 缺少必要套件: {e.name}")
-        print("請執行以下指令安裝：")
-        print("pip install -r requirements.txt")
-        input("\n請按任意鍵結束...")
-        return
+# 將專案路徑加入系統路徑，確保模組引用正確
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-    print("[2/2] 正在啟動主程式 (frontend/ui/AccountingGUI.py)...")
-    print("-" * 50)
-    
-    try:
-        cmd = [sys.executable, "frontend/ui/AccountingGUI.py"]
-        subprocess.run(cmd, check=True)
-    except Exception as e:
-        print(f"\n[提示] 程式已停止執行。")
-        input("\n請按任意鍵結束...")
+try:
+    from frontend.ui.AccountingGUI import AccountingGUI
+except ImportError:
+    print("❌ 錯誤：找不到前端模組，請確保在專案根目錄執行此腳本。")
+    sys.exit(1)
 
 if __name__ == "__main__":
-    run()
+    print("==========================================")
+    print("   Split-it-Smart (Group Ledger) 啟動中...")
+    print("==========================================")
+    app = AccountingGUI()
+    app.mainloop()

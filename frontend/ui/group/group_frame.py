@@ -103,14 +103,22 @@ class GroupFrame(ctk.CTkFrame):
         txs = self.system.get_group_transactions(gid)
         for tx in txs:
             f = ctk.CTkFrame(self.scroll); f.pack(fill="x", pady=5)
-            # 根據交易類型顯示不同的前綴文字
+            
+            # --- 左側：狀態標籤 ---
+            st_color, st_text = self._get_status_info(tx['status'])
+            status_tag = ctk.CTkLabel(f, text=st_text, font=ctk.CTkFont(size=10, weight="bold"),
+                                    fg_color=st_color, text_color="white", corner_radius=4, width=60)
+            status_tag.pack(side="left", padx=(10, 5), pady=5)
+
+            # --- 中間：交易描述 ---
             prefix = "償還了" if tx['type'] == 'SETTLEMENT' else "支出"
-            l = ctk.CTkLabel(f, text=f"{tx['payer']} {prefix} {tx['amount']}")
+            l = ctk.CTkLabel(f, text=f"{tx['payer']} {prefix} ${tx['amount']:,} - {tx['description'] or ''}")
             l.pack(side="left", padx=10)
             
-            # 綁定雙擊事件 (框架與內部標籤皆綁定，提升操作靈敏度)
+            # 綁定雙擊事件
             f.bind("<Double-1>", lambda e, tid=tx['id']: self.show_details(tid))
             l.bind("<Double-1>", lambda e, tid=tx['id']: self.show_details(tid))
+            status_tag.bind("<Double-1>", lambda e, tid=tx['id']: self.show_details(tid))
             
             if current_user in tx['pending_confirmations']:
                 btn_text = "確認收錢" if tx['type'] == 'SETTLEMENT' else "確認"
@@ -207,6 +215,17 @@ class GroupFrame(ctk.CTkFrame):
     def open_set_budget(self):
         """開啟預算設定對話框"""
         BudgetDialog(self.winfo_toplevel(), self.budget_val, self.save_budget_cb)
+
+    def _get_status_info(self, status):
+        """根據狀態回傳顏色與顯示文字"""
+        from backend.core.main import TransactionStatus
+        mapping = {
+            TransactionStatus.PENDING.name: ("#e67e22", "待確認"),
+            TransactionStatus.CONFIRMED.name: ("#2ecc71", "已確認"),
+            TransactionStatus.SETTLED.name: ("#7f8c8d", "已結清"),
+            TransactionStatus.REJECTED.name: ("#e74c3c", "有誤"),
+        }
+        return mapping.get(status, ("#34495e", status))
 
     def save_budget_cb(self, amount):
         """儲存預算後的回調"""

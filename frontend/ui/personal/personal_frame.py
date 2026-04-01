@@ -243,7 +243,14 @@ class PersonalFrame(ctk.CTkFrame):
             group_tag.grid(row=0, column=1, padx=5, sticky="w")
             
             # 3. 描述欄 (自動延伸)
-            ctk.CTkLabel(hf, text=f"{item['description'] or '一般支出'}", anchor="w").grid(row=0, column=2, padx=10, sticky="ew")
+            desc_text = item['description'] or '一般支出'
+            ctk.CTkLabel(hf, text=f"{desc_text}", anchor="w").grid(row=0, column=2, padx=10, sticky="ew")
+            
+            # --- 3.5 狀態標籤 (與 GroupFrame 保持一致) ---
+            st_color, st_text = self._get_status_info(item.get('status', 'PENDING'))
+            status_tag = ctk.CTkLabel(hf, text=st_text, font=ctk.CTkFont(size=10, weight="bold"),
+                                    fg_color=st_color, text_color="white", corner_radius=4, width=50)
+            status_tag.grid(row=0, column=3, padx=10, sticky="w")
             
             # 4. 金額欄 (固定寬度且靠右)
             is_payer = (item['payer_id'] == self.current_user)
@@ -268,6 +275,17 @@ class PersonalFrame(ctk.CTkFrame):
             # 提升 Label 層級使其顯示在按鈕上
             for child in hf.winfo_children():
                 if child != click_btn: child.lift()
+
+    def _get_status_info(self, status):
+        """與 GroupFrame 保持一致的狀態資訊"""
+        from backend.core.models import TransactionStatus
+        mapping = {
+            TransactionStatus.PENDING.name: ("#e67e22", "待確認"),
+            TransactionStatus.CONFIRMED.name: ("#2ecc71", "已確認"),
+            TransactionStatus.SETTLED.name: ("#7f8c8d", "已結清"),
+            TransactionStatus.REJECTED.name: ("#e74c3c", "有誤"),
+        }
+        return mapping.get(status, ("#34495e", status))
 
     def show_detail(self, tid):
         """顯示交易詳情彈窗 (由隊友實作)"""

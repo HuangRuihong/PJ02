@@ -10,6 +10,10 @@ class JoinGroupDialog(ctk.CTkToplevel):
         self.title("加入群組")
         self.geometry("350x250")
         self.callback = callback
+        self.attributes("-topmost", True)
+        self.grab_set() # 模態視窗使背景無法點擊
+        self.after(10, self.lift)
+        self.focus_force()
         
         # UI 配置
         ctk.CTkLabel(self, text="輸入 6 位邀群碼", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
@@ -34,6 +38,10 @@ class CreateGroupDialog(ctk.CTkToplevel):
         self.title("建立新群組")
         self.geometry("350x250")
         self.callback = callback
+        self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(10, self.lift)
+        self.focus_force()
         
         # UI 配置
         ctk.CTkLabel(self, text="群組名稱", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
@@ -57,6 +65,9 @@ class AddFriendDialog(ctk.CTkToplevel):
         self.add_cb = add_cb
         self.scan_cb = scan_cb
         self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(10, self.lift)
+        self.focus_force()
         
         # UI 配置
         ctk.CTkLabel(self, text="➕ 加入新好友", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(20, 10))
@@ -115,6 +126,10 @@ class AddTransactionDialog(ctk.CTkToplevel):
         self.callback, self.members = callback, members
         self.split_entries, self.check_vars, self.check_boxes = {}, {}, {}
         self.current_user = getattr(parent, "current_user", "")
+        self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(10, self.lift)
+        self.focus_force()
 
         # ── 標題 ──────────────────────────────────────────
         ctk.CTkLabel(self, text="記一筆消費", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 5))
@@ -355,6 +370,10 @@ class QRDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("我的 QR Code 名片")
         self.geometry("400x550")
+        self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(10, self.lift)
+        self.focus_force()
         ctk.CTkLabel(self, text=f"掃描以加入 {uid}", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
         img = Image.open(qr_path)
         ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(300, 300))
@@ -372,6 +391,10 @@ class TransactionDetailDialog(ctk.CTkToplevel):
         self.system = system
         self.current_user = current_user
         self.refresh_cb = refresh_cb
+        self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(10, self.lift)
+        self.focus_force()
         self.setup_ui()
 
     def setup_ui(self):
@@ -482,6 +505,10 @@ class BudgetDialog(ctk.CTkToplevel):
         self.title("設定群組預算")
         self.geometry("350x250")
         self.callback = callback
+        self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(10, self.lift)
+        self.focus_force()
         
         ctk.CTkLabel(self, text="設定本次旅遊/活動總預算", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=20)
         self.budget_entry = ctk.CTkEntry(self, placeholder_text="輸入總預算金額 (如: 50000)", width=200)

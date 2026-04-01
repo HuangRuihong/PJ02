@@ -189,7 +189,7 @@ class GroupService(BaseService):
             """, (group_id,))
             txs = []
             for r in cursor.fetchall():
-                tx = {"id": r[0], "payer": r[1], "amount": r[2], "status": r[3], "type": r[4], "desc": r[5], "loc": r[6], "time": r[7]}
+                tx = {"id": r[0], "payer": r[1], "amount": r[2], "status": r[3], "type": r[4], "description": r[5], "location": r[6], "time": r[7]}
                 cursor.execute("SELECT user_id FROM transaction_participants WHERE transaction_id = ? AND status = ?", (r[0], TransactionStatus.PENDING.name))
                 tx["pending_confirmations"] = [p[0] for p in cursor.fetchall()]
                 txs.append(tx)

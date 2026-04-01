@@ -27,17 +27,21 @@ class FriendsFrame(ctk.CTkFrame):
         
         ctk.CTkLabel(self.header, text="我的好友清單與結算狀態", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
         
-        # 按鈕容器 (放在右邊)
+        # 搜尋框與加入按鈕容器 (放在右邊)
         btn_container = ctk.CTkFrame(self.header, fg_color="transparent")
         btn_container.pack(side="right")
 
+        self.search_entry = ctk.CTkEntry(btn_container, placeholder_text="搜尋好友名稱...", width=150)
+        self.search_entry.pack(side="left", padx=5)
+        self.search_entry.bind("<KeyRelease>", lambda e: self.refresh())
+        
         # 顯示自己的 QR Code 按鈕
-        self.my_qr_btn = ctk.CTkButton(btn_container, text="我的 QR 名片", width=120, fg_color="#8e44ad", hover_color="#9b59b6",
+        self.my_qr_btn = ctk.CTkButton(btn_container, text="我的 QR 名片", width=110, fg_color="#8e44ad", hover_color="#9b59b6",
                                     command=lambda: self.winfo_toplevel().show_my_qr())
         self.my_qr_btn.pack(side="left", padx=5)
         
         # 加入好友按鈕
-        self.add_friend_btn = ctk.CTkButton(btn_container, text="+ 加入好友", width=120, 
+        self.add_friend_btn = ctk.CTkButton(btn_container, text="+ 加入好友", width=110, 
                                           command=self.open_add_friend_dialog)
         self.add_friend_btn.pack(side="left", padx=5)
         
@@ -59,8 +63,10 @@ class FriendsFrame(ctk.CTkFrame):
                 "overdue_days": 0 # 這部分可未來串接 check_overdue_transactions
             })
 
-    def refresh(self):
+    def refresh(self, user_id=None):
         """重新整理或切換到這頁時，呼叫此函數重新繪製內容"""
+        if user_id: self.current_user = str(user_id)
+        
         # 如果 self.scroll 還沒建立則返回 (預防初始化順序問題)
         if not hasattr(self, 'scroll'): return
         
@@ -76,14 +82,16 @@ class FriendsFrame(ctk.CTkFrame):
             ctk.CTkLabel(self.scroll, text="你目前還沒加入任何好友喔！", text_color="gray").pack(pady=20)
             return
 
+        # 搜尋過濾
+        search_q = self.search_entry.get().strip().lower() if hasattr(self, 'search_entry') else ""
+        if search_q:
+            friends = [f for f in friends if search_q in str(f).lower()]
+
         # 根據與該好友的「欠債/應收金額絕對值」由高到低降序排列
-        # 金額越大越重要，排在前面
         sorted_friends = sorted(friends, key=lambda fid: abs(summary.get(fid, 0)), reverse=True)
 
         for fid in sorted_friends:
-            # 取得與該好友的正確餘額
             bal = summary.get(fid, 0)
-            # 建立好友卡片
             self.create_friend_card({"id": fid, "balance": bal, "overdue_days": 0})
 
     def create_friend_card(self, friend):
@@ -136,7 +144,7 @@ class FriendsFrame(ctk.CTkFrame):
         if bal > 0:
             def send_dunning(target=fid, amt=bal):
                 from tkinter import messagebox
-                messagebox.showinfo("自動催繳系統", f"✅ 已成功發送催繳信號給 {target}！\n\n(系統會在背景紀錄：尚欠款 ${amt})\n註：若需對方登入立刻看見跨裝置提醒，需由隊友擴充 Notifications 資料表才能達成哦！")
+                messagebox.showinfo("自動催繳系統", f"✅ 已成功發送催繳信號給 {target}！\n\n(系統會在背景紀錄：尚欠款 ${amt})\n註：若需對方登入立刻看見跨裝置提醒，需由隊友擴充 Notifications 資料表才能達成哦！", parent=self.winfo_toplevel())
             
             ctk.CTkButton(right_area, text="📨 發送催告", width=90, fg_color="#d35400", hover_color="#e67e22",
                           command=send_dunning).pack(side="left", padx=5)
@@ -159,15 +167,15 @@ class FriendsFrame(ctk.CTkFrame):
         """透過 ID 加入好友的回調"""
         from tkinter import messagebox
         if fid == self.current_user:
-            messagebox.showwarning("提示", "不能加自己為好友喔！")
+            messagebox.showwarning("提示", "不能加自己為好友喔！", parent=self.winfo_toplevel())
             return
             
         if self.system.add_friend(self.current_user, fid):
-            messagebox.showinfo("成功", f"已成功加入好友：{fid}")
+            messagebox.showinfo("成功", f"已成功加入好友：{fid}", parent=self.winfo_toplevel())
             self.refresh()
             self.winfo_toplevel().refresh_ui()
         else:
-            messagebox.showerror("失敗", "無法加入該好友（可能 ID 不存在或已是好友）。")
+            messagebox.showerror("失敗", "無法加入該好友（可能 ID 不存在或已是好友）。", parent=self.winfo_toplevel())
 
     def open_repay_dialog(self, target_friend, amount):
         from tkinter import messagebox
@@ -175,6 +183,8 @@ class FriendsFrame(ctk.CTkFrame):
         dialog.title("回報帳單已結清")
         dialog.geometry("350x300")
         dialog.attributes("-topmost", True)
+        dialog.grab_set()
+        dialog.after(10, dialog.lift)
         
         ctk.CTkLabel(dialog, text=f"向 {target_friend} 結清 ${amount}", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20,10))
         ctk.CTkLabel(dialog, text="請選擇您的結清方式，對方確認後即會正式銷帳：", text_color="gray").pack(pady=5)
@@ -190,15 +200,15 @@ class FriendsFrame(ctk.CTkFrame):
             tx_ids = [p['tx_id'] for p in payables if p['creditor'] == target_friend]
             
             if not tx_ids:
-                messagebox.showerror("錯誤", "找不到相對應的待結清帳單！")
+                messagebox.showerror("錯誤", "找不到相對應的待結清帳單！", parent=dialog)
                 dialog.destroy()
                 return
                 
             if self.system.request_settlement(self.current_user, target_friend, amount, method_var.get(), tx_ids):
-                messagebox.showinfo("申請已送出", f"✅ 已把「{method_var.get()}結清」的通知發送給 {target_friend}！\n對方確認後就會自動消除負債。")
+                messagebox.showinfo("申請已送出", f"✅ 已把「{method_var.get()}結清」的通知發送給 {target_friend}！\n對方確認後就會自動消除負債。", parent=self.winfo_toplevel())
                 self.winfo_toplevel().refresh_ui()
             else:
-                messagebox.showerror("錯誤", "發生未知錯誤，請重試。")
+                messagebox.showerror("錯誤", "發生未知錯誤，請重試。", parent=dialog)
             dialog.destroy()
             
         ctk.CTkButton(dialog, text="確認送出結清申請", command=submit).pack(pady=20)

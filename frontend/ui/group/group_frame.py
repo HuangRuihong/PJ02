@@ -154,24 +154,24 @@ class GroupFrame(ctk.CTkFrame):
         from tkinter import messagebox
         import pyperclip
         msg = self.system.get_notification_message(tid)
-        if messagebox.askyesno("生成催帳訊息", f"已生成針對該筆交易的提醒文字：\n\n{msg}\n\n是否將此文字複製到剪貼簿？"):
+        if messagebox.askyesno("生成催帳訊息", f"已生成針對該筆交易的提醒文字：\n\n{msg}\n\n是否將此文字複製到剪貼簿？", parent=self.winfo_toplevel()):
             try:
                 pyperclip.copy(msg)
-                messagebox.showinfo("成功", "催帳訊息已複製到剪貼簿，您可以直接貼上至 Line 或其他通訊軟體。")
+                messagebox.showinfo("成功", "催帳訊息已複製到剪貼簿，您可以直接貼上至 Line 或其他通訊軟體。", parent=self.winfo_toplevel())
             except Exception:
-                messagebox.showerror("錯誤", "無法存取剪貼簿。")
+                messagebox.showerror("錯誤", "無法存取剪貼簿。", parent=self.winfo_toplevel())
 
     def handle_export_bill(self):
         """匯出群組帳單摘要"""
         from tkinter import messagebox
         import pyperclip
         summary = self.system.generate_group_bill_summary(self.gid)
-        if messagebox.askyesno("匯出帳單摘要", f"即將生成的帳單內容如下：\n\n{summary}\n\n是否將此摘要複製到剪貼簿？"):
+        if messagebox.askyesno("匯出帳單摘要", f"即將生成的帳單內容如下：\n\n{summary}\n\n是否將此摘要複製到剪貼簿？", parent=self.winfo_toplevel()):
             try:
                 pyperclip.copy(summary)
-                messagebox.showinfo("成功", "帳單摘要已複製到剪貼簿。")
+                messagebox.showinfo("成功", "帳單摘要已複製到剪貼簿。", parent=self.winfo_toplevel())
             except Exception:
-                messagebox.showerror("錯誤", "無法存取剪貼簿。")
+                messagebox.showerror("錯誤", "無法存取剪貼簿。", parent=self.winfo_toplevel())
 
     def handle_settle(self):
         """處理結算按鈕點擊：詢問模式"""
@@ -181,7 +181,7 @@ class GroupFrame(ctk.CTkFrame):
             "請選擇結算模式：\n\n"
             "是 (Yes): 逐筆結清 (直接給付)\n"
             "否 (No): 智慧自動抵銷 (最省事)\n"
-            "取消: 中止結算", icon='question', type='yesnocancel')
+            "取消: 中止結算", icon='question', type='yesnocancel', parent=self.winfo_toplevel())
         
         if mode_choice == 'cancel': return
         
@@ -189,28 +189,28 @@ class GroupFrame(ctk.CTkFrame):
         
         plan = self.system.settle_debts(self.gid, self.current_user, mode=mode)
         if not plan:
-            messagebox.showinfo("結算結果", "目前沒有已確認且未結算的交易項目。")
+            messagebox.showinfo("結算結果", "目前沒有已確認且未結算的交易項目。", parent=self.winfo_toplevel())
             return
             
         # 顯示結算計畫結果
         result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']}" for p in plan])
         messagebox.showinfo("結算與還款落實", 
             f"已使用「{mode}」模式完成計算，建議還款方式如下：\n\n{result_str}\n\n"
-            "上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。")
+            "上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。", parent=self.winfo_toplevel())
         self.winfo_toplevel().refresh_ui()
 
     def handle_delete(self):
         """處理刪除群組按鈕點擊：實作二次確認"""
         from tkinter import messagebox
-        confirm = messagebox.askyesno("確認刪除", f"確定要徹底刪除群組「{self.winfo_toplevel().current_group_name}」嗎？\n\n這將會抹除該群組內所有的交易紀錄與參與者資料，且無法復原。")
+        confirm = messagebox.askyesno("確認刪除", f"確定要徹底刪除群組「{self.winfo_toplevel().current_group_name}」嗎？\n\n這將會抹除該群組內所有的交易紀錄與參與者資料，且無法復原。", parent=self.winfo_toplevel())
         
         if confirm:
             if self.system.delete_group(self.gid):
-                messagebox.showinfo("成功", "群組已成功移除。")
+                messagebox.showinfo("成功", "群組已成功移除。", parent=self.winfo_toplevel())
                 # 強制主視窗重新載入群組數據（會切換到剩餘的第一個群組）
                 self.winfo_toplevel().load_initial_data()
             else:
-                messagebox.showerror("錯誤", "刪除群組時發生錯誤。")
+                messagebox.showerror("錯誤", "刪除群組時發生錯誤。", parent=self.winfo_toplevel())
 
     def open_set_budget(self):
         """開啟預算設定對話框"""
@@ -231,3 +231,6 @@ class GroupFrame(ctk.CTkFrame):
         """儲存預算後的回調"""
         if self.system.set_group_budget(self.gid, amount):
             self.refresh(self.gid, self.winfo_toplevel().current_group_name, self.winfo_toplevel().current_group_code, self.current_user)
+        else:
+            from tkinter import messagebox
+            messagebox.showerror("錯誤", "無法存取資料庫設定預算。", parent=self.winfo_toplevel())

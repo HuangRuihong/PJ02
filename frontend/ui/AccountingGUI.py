@@ -94,7 +94,7 @@ class AccountingGUI(ctk.CTk):
 
     def login(self, user, remember):
         """處理登入邏輯"""
-        self.current_user = user
+        self.current_user = str(user) # 強制轉為字串避免與資料庫 TEXT 型別不配
         if remember:
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
             with open(CONFIG_PATH, "w") as f: 
@@ -111,6 +111,7 @@ class AccountingGUI(ctk.CTk):
         """登入後載入主應用程式界面"""
         for w in self.main_container.winfo_children(): w.destroy()
         self.setup_ui()
+        self.update_idletasks() # 確保介面容器已建立再載入數據
         self.load_initial_data()
         self.after(1000, self.check_overdue_and_remind)
 
@@ -210,11 +211,21 @@ class AccountingGUI(ctk.CTk):
         else:
             self.group_opt.set("(尚無群組)")
         
-        self.tab_p.refresh()
-        self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
-        self.tab_f.refresh()
-        self.tab_a.refresh(self.current_group_id)
-        self.tab_c.refresh(self.current_group_id)
+        # 分別刷新各分頁，避免單一組件報錯導致後續分頁無法刷新
+        try: self.tab_p.refresh()
+        except Exception as e: print(f"Refresh Personal Error: {e}")
+        
+        try: self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
+        except Exception as e: print(f"Refresh Group Error: {e}")
+        
+        try: self.tab_f.refresh(self.current_user)
+        except Exception as e: print(f"Refresh Friends Error: {e}")
+        
+        try: self.tab_a.refresh(self.current_group_id)
+        except Exception as e: print(f"Refresh Analysis Error: {e}")
+        
+        try: self.tab_c.refresh(self.current_group_id)
+        except Exception as e: print(f"Refresh Calendar Error: {e}")
 
     def switch_group(self, name):
         """切換目前活動群組"""
@@ -230,10 +241,10 @@ class AccountingGUI(ctk.CTk):
     def join_group_cb(self, code):
         """加入群組成功後的回調處理"""
         if self.system.join_group_by_code(self.current_user, code): 
-            mbox.showinfo("成功", f"已成功加入群組碼: {code}")
+            mbox.showinfo("成功", f"已成功加入群組碼: {code}", parent=self)
             self.load_initial_data()
         else:
-            mbox.showerror("失敗", "找不到該群組，或是您已在群組中。")
+            mbox.showerror("失敗", "找不到該群組，或是您已在群組中。", parent=self)
 
     def open_create_group(self): 
         """開啟建立群組視窗"""
@@ -243,16 +254,16 @@ class AccountingGUI(ctk.CTk):
         """建立群組成功後的回調處理"""
         gid, code = self.system.create_group_with_code(self.current_user, name)
         if gid: 
-            mbox.showinfo("群組已建立", f"成功建立群組: {name}\n邀群碼: {code}")
+            mbox.showinfo("群組已建立", f"成功建立群組: {name}\n邀群碼: {code}", parent=self)
             self.load_initial_data(target_gid=gid)
         else:
-            mbox.showerror("錯誤", "建立群組時發生未知錯誤。")
+            mbox.showerror("錯誤", "建立群組時發生未知錯誤。", parent=self)
 
     def open_global_add_tx(self):
         """側邊欄全局快速記帳：直接與當前群組功能綁定"""
         if not self.current_group_id:
             from tkinter import messagebox
-            messagebox.showwarning("提示", "請先選擇右上角群組，或進入好友卡片點擊發起私帳！")
+            messagebox.showwarning("提示", "請先選擇右上角群組，或進入好友卡片點擊發起私帳！", parent=self)
             return
         self.open_add_tx()
 
@@ -295,7 +306,7 @@ class AccountingGUI(ctk.CTk):
         if self.current_group_id:
             if self.system.settle_debts(self.current_group_id, self.current_user, mode=mode): 
                 self.refresh_ui()
-                mbox.showinfo("結算成功", f"此群組已依照「{mode}」模式完成結算！")
+                mbox.showinfo("結算成功", f"此群組已依照「{mode}」模式完成結算！", parent=self)
 
     def show_my_qr(self): 
         """顯示個人 QR Code 名片"""
@@ -304,21 +315,21 @@ class AccountingGUI(ctk.CTk):
     def scan_qr_from_file(self):
         """掃描本地圖片文件以加入好友"""
         if not SCAN_SUPPORT: 
-            mbox.showwarning("環境限制", "您的電腦環境缺少 pyzbar 或 opencv 庫，暫無法使用圖片掃描功能。\n請在終端機執行 `pip install pyzbar opencv-python` 以啟用此功能。")
+            mbox.showwarning("環境限制", "您的電腦環境缺少 pyzbar 或 opencv 庫，暫無法使用圖片掃描功能。\n請在終端機執行 `pip install pyzbar opencv-python` 以啟用此功能。", parent=self)
             return
-        p = fd.askopenfilename()
+        p = fd.askopenfilename(parent=self)
         if p:
             img = cv2.imdecode(np.fromfile(p, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
             objs = decode(img)
             if objs:
                 fid = objs[0].data.decode('utf-8')
                 if self.system.add_friend(self.current_user, fid):
-                    mbox.showinfo("成功", f"掃描成功！已加入好友：{fid}")
+                    mbox.showinfo("成功", f"掃描成功！已加入好友：{fid}", parent=self)
                     self.refresh_ui()
                 else: 
-                    mbox.showerror("失敗", "無法加入該好友（可能已是好友）。")
+                    mbox.showerror("失敗", "無法加入該好友（可能已是好友）。", parent=self)
             else:
-                mbox.showerror("辨識失敗", "無法在該圖片中找到有效的 QR Code。")
+                mbox.showerror("辨識失敗", "無法在該圖片中找到有效的 QR Code。", parent=self)
                 self.refresh_ui()
 
     def quick_charge(self, fid): 

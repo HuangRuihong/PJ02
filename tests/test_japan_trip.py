@@ -1,12 +1,16 @@
 import os
 import sys
-from backend.core.main import DebtSystem
-from backend.core.models import TransactionStatus
+
+# 核心：必須在引用 backend 之前將專案根目錄加入系統路徑
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 設定編碼，解決 Windows 終端機顯示中文可能發生的亂碼問題
 if sys.platform == "win32":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+from backend.core.main import DebtSystem
+from backend.core.models import TransactionStatus
 
 def cleanup():
     """清理測試資料庫環境"""

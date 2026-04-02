@@ -71,7 +71,7 @@ class GroupService(BaseService):
             except Exception: return False
 
     def get_group_budget_status(self, group_id):
-        """獲取群組預算剩餘狀況 (預算 - 已支出)"""
+        """獲取群組預算剩餘狀況 (僅統計已確認 [CONFIRMED/SETTLED] 的支出)"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # 1. 取得總預算
@@ -79,8 +79,12 @@ class GroupService(BaseService):
             row = cursor.fetchone()
             budget = row[0] if row else 0
             
-            # 2. 取得該群組累積支出 (僅統計 EXPENSE 類型)
-            cursor.execute("SELECT SUM(amount) FROM transactions WHERE group_id = ? AND type = 'EXPENSE'", (group_id,))
+            # 2. 取得該群組累積支出 (僅統計已入帳的 EXPENSE)
+            cursor.execute("""
+                SELECT SUM(amount) FROM transactions 
+                WHERE group_id = ? AND type = 'EXPENSE' 
+                AND status IN (?, ?)
+            """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name))
             spent = cursor.fetchone()[0] or 0
             
             return {
@@ -150,6 +154,26 @@ class GroupService(BaseService):
                 conn.rollback()
                 return False
 
+    def reject_transaction(self, user_id, transaction_id):
+        """參與者拒絕該筆交易 (一票否決)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                # 1. 更新參與者狀態為 REJECTED
+                cursor.execute("""
+                    UPDATE transaction_participants SET status = ?
+                    WHERE transaction_id = ? AND user_id = ?
+                """, (TransactionStatus.REJECTED.name, transaction_id, user_id))
+                
+                # 2. 透過狀態機更新主表
+                self._update_main_transaction_status(cursor, transaction_id)
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Reject Error: {e}")
+                conn.rollback()
+                return False
+
     def _update_main_transaction_status(self, cursor, transaction_id):
         """核心狀態機：檢查所有參與者，自動提升交易主表狀態 (依優先級判斷)"""
         # 1. 取得該筆交易目前所有參與者的狀態分佈
@@ -161,24 +185,26 @@ class GroupService(BaseService):
 
         if not statuses: return
 
-        # 2. 判斷優先級邏輯 (學長建議修正：一票否決制 & 全員結清)
-        # 優先級 1: REJECTED (一票否決)
+        # 2. 定義狀態轉換規則 (優先級判定)
+        new_main_status = TransactionStatus.PENDING.name # 預設為待處理
+
+        # 優先級 1: REJECTED (一票否決制：只要有一個人拒絕，整筆主表標記為拒絕)
         if any(s == TransactionStatus.REJECTED.name for s in statuses):
             new_main_status = TransactionStatus.REJECTED.name
             
-        # 優先級 2: PENDING (只要有人還沒確認，就不能進入正式帳單)
+        # 優先級 2: PENDING (只要還有人沒點確認，就不算 CONFIRMED)
         elif any(s == TransactionStatus.PENDING.name for s in statuses):
             new_main_status = TransactionStatus.PENDING.name
             
-        # 優先級 3: 全員 SETTLED (只有全部人都清償了，整筆交易才算結案)
+        # 優先級 3: 全員 SETTLED (整筆結案)
         elif all(s == TransactionStatus.SETTLED.name for s in statuses):
             new_main_status = TransactionStatus.SETTLED.name
             
-        # 優先級 4: CONFIRMED (當所有人都不在 PENDING/REJECTED，但還沒全部還完)
+        # 優先級 4: CONFIRMED (剩下的情況即是所有人都 CONFIRMED 或 SETTLED 的混合體)
         else:
             new_main_status = TransactionStatus.CONFIRMED.name
 
-        # 3. 執行主表狀態同步
+        # 3. 執行主表狀態同步 (並根據新狀態更新 description 或 metadata 可在未來擴充)
         cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (new_main_status, transaction_id))
 
     def get_group_transactions(self, group_id):
@@ -415,15 +441,34 @@ class GroupService(BaseService):
                 return False
 
     def generate_group_bill_summary(self, group_id):
-        """生成群組當前債務結算的動態摘要文字"""
+        """生成群組當前債務結算的動態摘要文字 (包含詳細項目列報) [v2.1 WOW Edition]"""
         balances = self.get_group_balances(group_id)
-        if not balances:
-            return "目前帳目已全部結清，暫無待處理債務。"
-
-        summary = f"【群組帳單摘要】\n群組名稱: {self._get_group_name(group_id)}\n生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        summary += "-" * 30 + "\n"
         
-        # 應收與應付明細
+        summary = f"【群組帳單摘要】\n群組名稱: {self._get_group_name(group_id)}\n生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        summary += "=" * 30 + "\n"
+        
+        # 1. 列出「生效中」的重要支出項目
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT description, amount, payer_id, status FROM transactions 
+                WHERE group_id = ? AND type = 'EXPENSE' AND status IN (?, ?)
+                ORDER BY timestamp DESC LIMIT 10
+            """, (group_id, TransactionStatus.PENDING.name, TransactionStatus.CONFIRMED.name))
+            txs = cursor.fetchall()
+            
+            if txs:
+                summary += " [主要支出明細]\n"
+                for desc, amt, p_id, status in txs:
+                    st_flag = " (待確認)" if status == TransactionStatus.PENDING.name else ""
+                    summary += f"  · ${amt} - {desc or '不具名項目'}{st_flag} [由 {p_id} 墊付]\n"
+                summary += "-" * 30 + "\n"
+
+        if not balances:
+            summary += " >> 目前帳目已全部結清，暫無待處理債務。"
+            return summary
+            
+        # 2. 應收與應付明細
         creditors = {u: amt for u, amt in balances.items() if amt > 0}
         debtors = {u: abs(amt) for u, amt in balances.items() if amt < 0}
         
@@ -437,9 +482,8 @@ class GroupService(BaseService):
             for u, amt in debtors.items():
                 summary += f"  · {u}: -${amt}\n"
         
-        # 建議結算路徑 (使用簡易簡化模式)
-        summary += "\n [建議還款路徑]\n"
-        plan = []
+        # 3. 智慧還款路徑 (使用抵銷演算法)
+        summary += "\n [智慧建議還款路徑]\n"
         d_list = sorted(debtors.items(), key=lambda x: x[1], reverse=True)
         c_list = sorted(creditors.items(), key=lambda x: x[1], reverse=True)
         
@@ -450,13 +494,13 @@ class GroupService(BaseService):
         while d_idx < len(temp_d) and c_idx < len(temp_c):
             pay_amt = min(temp_d[d_idx][1], temp_c[c_idx][1])
             if pay_amt > 0:
-                summary += f"  · {temp_d[d_idx][0]} -> 轉帳 ${pay_amt} 給 {temp_c[c_idx][0]}\n"
+                summary += f"  · {temp_d[d_idx][0]} -> 轉帳 ${pay_amt} 予 {temp_c[c_idx][0]}\n"
             temp_d[d_idx][1] -= pay_amt
             temp_c[c_idx][1] -= pay_amt
             if temp_d[d_idx][1] == 0: d_idx += 1
             if temp_c[c_idx][1] == 0: c_idx += 1
             
-        summary += "\n請各位成員確認後，於系統內進行「確認」與「還款」操作。"
+        summary += "\n系統提醒：請在確認上述細節無誤後，於系統內點擊「確認」與「還款」。"
         return summary
 
     def get_notification_message(self, tx_id):

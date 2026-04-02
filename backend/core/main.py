@@ -148,3 +148,7 @@ class DebtSystem(PersonalService, GroupService):
                         "desc": desc
                     })
         return overdue_list
+
+    def reject_transaction(self, user_id, transaction_id):
+        """參與者拒絕交易項目 (由 Person B 負責)"""
+        return self.group_service.reject_transaction(user_id, transaction_id)

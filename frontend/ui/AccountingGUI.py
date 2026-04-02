@@ -34,15 +34,15 @@ CONFIG_PATH = "backend/data/config.json"
 
 class AccountingGUI(ctk.CTk):
     """主程式類別：驅動整個 group ledger 系統的 GUI 核心"""
-    def __init__(self):
+    def __init__(self, system_instance=None):
         super().__init__()
         self.title("group ledger - 多人群組本地記帳系統")
         self.geometry("1150x900")
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
         
-        # 核心數據系統初始化
-        self.system = DebtSystem()
+        # 核心數據系統初始化 (本地或網路)
+        self.system = system_instance if system_instance else DebtSystem()
         self.current_user = None
         self.current_group_id = None
         self.current_group_name = "未選擇"

@@ -118,6 +118,10 @@ class GroupService(BaseService):
                         INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status)
                         VALUES (?, ?, ?, ?)
                     """, (transaction_id, uid, owed, status))
+                
+                # 3. 立即檢查狀態機：若為單人群組或代墊人已確認，應自動提升主表狀態
+                self._update_main_transaction_status(cursor, transaction_id)
+                
                 return True
             except Exception as e:
                 print(f"Error: {e}")
@@ -464,7 +468,14 @@ class GroupService(BaseService):
         msg += f"項目：{details['desc'] or '未命名支出'}\n"
         msg += f"金額：${details['amount']}\n"
         msg += f"付款人：{details['payer']}\n"
-        msg += f"日期：{details['time']}\n"
+        display_time = details['time']
+        if not isinstance(display_time, str):
+            display_time = display_time.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            # 若為字串則取前 19 位 (YYYY-MM-DD HH:MM:SS)
+            display_time = display_time[:19]
+            
+        msg += f"日期：{display_time}\n"
         msg += "-" * 20 + "\n"
         
         pending = [p for p in details['participants'] if p['status'] == TransactionStatus.PENDING.name]

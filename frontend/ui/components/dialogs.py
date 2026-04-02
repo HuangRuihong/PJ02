@@ -256,21 +256,14 @@ class AddTransactionDialog(ctk.CTkToplevel):
             total = int(self.amt_entry.get() or 0)
 
             if mode == self.MODE_PRIVATE:
-                for m, v in self.check_vars.items():
-                    v.set(1 if m == self.current_user else 0)
-                    ent = self.split_entries[m]
-                    ent.configure(state="normal")
-                    ent.delete(0, "end")
-                    ent.insert(0, str(total) if m == self.current_user else "0")
-                    ent.configure(state="readonly")
-                self._update_balance_label(total, total)
+                # 私帳模式：運作邏輯與「平均分帳」相同，但會被標記為私有的
+                self.scroll.configure(label_text="私帳成員 (不計入群組公帳)")
+            else:
                 self.scroll.configure(label_text="分帳成員")
-                return
 
-            self.scroll.configure(label_text="分帳成員")
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
 
-            if mode == self.MODE_EQUAL:
+            if mode in [self.MODE_EQUAL, self.MODE_PRIVATE]:
                 if not sel:
                     self._update_balance_label(total, 0)
                     return
@@ -333,13 +326,8 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 messagebox.showerror("日期錯誤", "無法讀取所選日期，請重新選擇。")
                 return
 
-            # ── 個人私帳 ──────────────────────────────────
-            if mode == self.MODE_PRIVATE:
-                self.callback(total, [payer], {payer: total}, desc, loc, is_private=True, payer=payer, date=final_date)
-                self.destroy()
-                return
-
-            # ── 平均分帳 / 手動自訂 ───────────────────────
+            # ── 提交邏輯 ───────────────────────
+            is_private = (mode == self.MODE_PRIVATE)
             sel = [m for m, v in self.check_vars.items() if v.get() == 1]
             if not sel:
                 from tkinter import messagebox
@@ -355,7 +343,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 return
 
             if total > 0 and sel:
-                self.callback(total, sel, custom_splits, desc, loc, payer=payer, date=final_date)
+                self.callback(total, sel, custom_splits, desc, loc, is_private=is_private, payer=payer, date=final_date)
                 self.destroy()
             else:
                 from tkinter import messagebox

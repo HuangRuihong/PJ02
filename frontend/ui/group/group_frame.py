@@ -129,7 +129,7 @@ class GroupFrame(ctk.CTkFrame):
             if current_user == tx['payer'] and tx['pending_confirmations']:
                 remind_text = "提醒確認" if tx['type'] == 'SETTLEMENT' else "催帳"
                 ctk.CTkButton(f, text=remind_text, width=80, fg_color="#d35400", hover_color="#a04000",
-                             command=lambda tid=tx['id']: self.handle_notify(tid)).pack(side="right", padx=5)
+                command=lambda tid=tx['id']: self.handle_notify(tid)).pack(side="right", padx=5)
 
     def open_add_tx(self):
         self.winfo_toplevel().open_add_tx()

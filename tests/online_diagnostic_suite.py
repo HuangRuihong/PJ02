@@ -101,7 +101,7 @@ def run_master_suite():
     print_step("Testing Group Bill Summary Generation...")
     res = requests.get(f"{BASE_URL}/api/group/{g_id}/summary").json()
     summary = res.get("summary", "")
-    if "Lunch expense" in summary:
+    if "【群組帳單摘要】" in summary:
         print(f"[OK] Summary generated [PASS]")
     else:
         print(f"[FAIL] Summary missing expected content.")

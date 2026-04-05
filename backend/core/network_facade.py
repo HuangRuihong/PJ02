@@ -150,19 +150,9 @@ class NetworkDebtSystem:
         qr.add_data(user_id)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
-        path = f"backend/data/qr_{user_id}.png"
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        path = os.path.join(data_dir, f"qr_{user_id}.png")
         img.save(path)
         return os.path.abspath(path)
 
-    def add_friend(self, user_id, friend_id):
-        # 這裡需在 app.py 增加好友 API，為節省時間我們先略過，或快速補上
-        return False # 暫時不實作連網好友加入
-
-    def check_overdue_transactions(self):
-        # 這裡通常在本地 GUI 展示提醒，可先返回空清單或串接 API
-        return []
-
-    # 封裝以維持 Facade 一致性
-    def settle_specific_debts(self, debtor_id, creditor_id, tx_ids):
-        # 批量結算亦需伺服器支持
-        return False

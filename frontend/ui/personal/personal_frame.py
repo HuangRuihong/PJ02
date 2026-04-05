@@ -258,7 +258,7 @@ class PersonalFrame(ctk.CTkFrame):
             my_share = item.get('my_share', 0)
             
             amt_info = ctk.CTkFrame(hf, fg_color="transparent", width=220)
-            amt_info.grid(row=0, column=3, padx=10, sticky="e")
+            amt_info.grid(row=0, column=4, padx=10, sticky="e")
             
             if is_payer:
                 others_owe = total_amt - my_share

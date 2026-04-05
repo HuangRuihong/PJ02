@@ -49,7 +49,7 @@ class AnalysisFrame(ctk.CTkFrame):
         group_sums = {}
         daily_sums = {}
         for tx in history:
-            g_id = tx["group"] if tx["group"] != "PERSONAL" else "個人私帳"
+            g_id = tx["group_name"]  # group_name 由 SQL 已處理「個人私帳」對應
             amt = tx["amount"]
             group_sums[g_id] = group_sums.get(g_id, 0) + amt
             

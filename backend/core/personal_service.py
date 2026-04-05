@@ -34,7 +34,9 @@ class PersonalService(BaseService):
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         
-        path = f"backend/data/qr_{user_id}.png"
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        path = os.path.join(data_dir, f"qr_{user_id}.png")
         img.save(path)
         return os.path.abspath(path)
 

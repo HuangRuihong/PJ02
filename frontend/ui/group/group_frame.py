@@ -69,7 +69,7 @@ class GroupFrame(ctk.CTkFrame):
             self.delete_btn.grid_remove()
             self.add_btn.grid_remove()
             self.refresh_btn.grid_remove()
-            self.budget_card.place_forget()
+            self.budget_card.pack_forget()
             for w in self.scroll.winfo_children(): w.destroy()
             return
         

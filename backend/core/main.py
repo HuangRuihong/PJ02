@@ -52,7 +52,8 @@ class DebtSystem(PersonalService, GroupService):
                             WHERE transaction_id = ? AND user_id = ?
                         """, (TransactionStatus.SETTLED.name, now, tid, debtor_id))
                 
-                s_id = f"st_{datetime.now().strftime('%Y%m%d%H%M%S')}_{debtor_id}"
+                import uuid
+                s_id = f"st_{uuid.uuid4().hex[:12]}"
                 cursor.execute("""
                     INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, timestamp, description)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)

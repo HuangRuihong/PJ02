@@ -16,7 +16,7 @@ class GroupFrame(ctk.CTkFrame):
         
         # 設定 grid 欄位：label 固定，按鈕欄均分彈性空間
         self.header.columnconfigure(0, weight=0)  # label (固定)
-        for col in range(1, 6):
+        for col in range(1, 7):
             self.header.columnconfigure(col, weight=1)  # 按鈕欄 (自適應)
         
         self.info_label = ctk.CTkLabel(self.header, text="群組動態", font=ctk.CTkFont(size=20, weight="bold"))
@@ -28,14 +28,17 @@ class GroupFrame(ctk.CTkFrame):
         self.refresh_btn = ctk.CTkButton(self.header, text="刷新", command=self.handle_refresh, fg_color="#3498db", hover_color="#2980b9")
         self.refresh_btn.grid(row=0, column=2, sticky="ew", padx=4)
         
-        self.settle_btn = ctk.CTkButton(self.header, text="一鍵結算", command=self.handle_settle, fg_color="#2ecc71", hover_color="#27ae60")
+        self.settle_btn = ctk.CTkButton(self.header, text="一般結算", command=lambda: self.handle_settle("ORIGINAL"), fg_color="#2ecc71", hover_color="#27ae60")
         self.settle_btn.grid(row=0, column=3, sticky="ew", padx=4)
         
+        self.simplify_btn = ctk.CTkButton(self.header, text="智慧結算", command=lambda: self.handle_settle("SIMPLIFIED"), fg_color="#1abc9c", hover_color="#16a085")
+        self.simplify_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        
         self.export_btn = ctk.CTkButton(self.header, text="匯出帳單", command=self.handle_export_bill, fg_color="#f39c12", hover_color="#e67e22")
-        self.export_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        self.export_btn.grid(row=0, column=5, sticky="ew", padx=4)
         
         self.delete_btn = ctk.CTkButton(self.header, text="刪除群組", command=self.handle_delete, fg_color="#e74c3c", hover_color="#c0392b")
-        self.delete_btn.grid(row=0, column=5, sticky="ew", padx=4)
+        self.delete_btn.grid(row=0, column=6, sticky="ew", padx=4)
 
         # 成員名單顯示區
         self.members_info = ctk.CTkFrame(self, fg_color="transparent")
@@ -66,6 +69,7 @@ class GroupFrame(ctk.CTkFrame):
             self.info_label.configure(text="(尚無群組)")
             self.members_info.pack_forget()
             self.settle_btn.grid_remove()
+            self.simplify_btn.grid_remove()
             self.delete_btn.grid_remove()
             self.add_btn.grid_remove()
             self.refresh_btn.grid_remove()
@@ -85,8 +89,9 @@ class GroupFrame(ctk.CTkFrame):
         self.add_btn.grid(row=0, column=1, sticky="ew", padx=4)
         self.refresh_btn.grid(row=0, column=2, sticky="ew", padx=4)
         self.settle_btn.grid(row=0, column=3, sticky="ew", padx=4)
-        self.export_btn.grid(row=0, column=4, sticky="ew", padx=4)
-        self.delete_btn.grid(row=0, column=5, sticky="ew", padx=4)
+        self.simplify_btn.grid(row=0, column=4, sticky="ew", padx=4)
+        self.export_btn.grid(row=0, column=5, sticky="ew", padx=4)
+        self.delete_btn.grid(row=0, column=6, sticky="ew", padx=4)
         
         # 載入並顯示成員名單
         members = self.system.get_group_members(gid)
@@ -173,19 +178,12 @@ class GroupFrame(ctk.CTkFrame):
             except Exception:
                 messagebox.showerror("錯誤", "無法存取剪貼簿。", parent=self.winfo_toplevel())
 
-    def handle_settle(self):
-        """處理結算按鈕點擊：詢問模式"""
+    def handle_settle(self, mode):
+        """處理結算按鈕點擊"""
         from tkinter import messagebox
-        # 詢問結算模式
-        mode_choice = messagebox.askquestion("選擇結算模式", 
-            "請選擇結算模式：\n\n"
-            "是 (Yes): 逐筆結清 (直接給付)\n"
-            "否 (No): 智慧自動抵銷 (最省事)\n"
-            "取消: 中止結算", icon='question', type='yesnocancel', parent=self.winfo_toplevel())
         
-        if mode_choice == 'cancel': return
-        
-        mode = "ORIGINAL" if mode_choice == 'yes' else "SIMPLIFIED"
+        confirm = messagebox.askyesno("確認結算", f"確定要執行「{ '一般' if mode=='ORIGINAL' else '智慧' }結算」嗎？\n這將會產生還款單並將目前的消費標記為已結清。", parent=self.winfo_toplevel())
+        if not confirm: return
         
         plan = self.system.settle_debts(self.gid, self.current_user, mode=mode)
         if not plan:
@@ -193,8 +191,8 @@ class GroupFrame(ctk.CTkFrame):
             return
             
         # 顯示結算計畫結果
-        result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']}" for p in plan])
-        messagebox.showinfo("結算與還款落實", 
+        result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']:,}元" for p in plan])
+        messagebox.showinfo("結算計畫已生成", 
             f"已使用「{mode}」模式完成計算，建議還款方式如下：\n\n{result_str}\n\n"
             "上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。", parent=self.winfo_toplevel())
         self.winfo_toplevel().refresh_ui()

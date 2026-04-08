@@ -231,12 +231,13 @@ class GroupService(BaseService):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # 取得所有已確認且未結算的交易參與紀錄
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT tp.user_id, tp.owed_amount, t.payer_id
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
-            """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
+                AND t.type = ?
+            """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name, TransactionType.EXPENSE.name))
             
             rows = cursor.fetchall()
             for user_id, owed_amt, payer_id in rows:
@@ -276,12 +277,13 @@ class GroupService(BaseService):
             pair_debts = {} # {(debtor, creditor): amount}
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT tp.user_id, tp.owed_amount, t.payer_id
                     FROM transaction_participants tp
                     JOIN transactions t ON tp.transaction_id = t.transaction_id
                     WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
-                """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
+                    AND t.type = ?
+                """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name, TransactionType.EXPENSE.name))
                 for debtor, amount, creditor in cursor.fetchall():
                     if debtor == creditor: continue
                     pair = tuple(sorted((debtor, creditor)))

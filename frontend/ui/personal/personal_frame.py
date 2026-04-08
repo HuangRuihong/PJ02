@@ -144,22 +144,22 @@ class PersonalFrame(ctk.CTkFrame):
         # --- 卡片1：應收 (別人欠我錢) ---
         card1 = ctk.CTkFrame(cards_container, fg_color="#2c3e50")
         card1.grid(row=0, column=0, padx=5, sticky="ew")
-        ctk.CTkLabel(card1, text="別人欠我 (應收)", text_color="gray80").pack(pady=(10, 0))
-        ctk.CTkLabel(card1, text=f"+ ${total_receivable}", 
+        ctk.CTkLabel(card1, text="別人欠我 (已確認)", text_color="gray80").pack(pady=(10, 0))
+        ctk.CTkLabel(card1, text=f"+ ${total_receivable:,}", 
                      font=ctk.CTkFont(size=24, weight="bold"), text_color="#2ecc71").pack(pady=(5, 15))
                      
         # --- 卡片2：應付 (我欠別人錢) ---
         card2 = ctk.CTkFrame(cards_container, fg_color="#2c3e50")
         card2.grid(row=0, column=1, padx=5, sticky="ew")
-        ctk.CTkLabel(card2, text="我欠別人 (應付)", text_color="gray80").pack(pady=(10, 0))
-        ctk.CTkLabel(card2, text=f"- ${total_payable}", 
+        ctk.CTkLabel(card2, text="我欠別人 (已確認)", text_color="gray80").pack(pady=(10, 0))
+        ctk.CTkLabel(card2, text=f"- ${total_payable:,}", 
                      font=ctk.CTkFont(size=24, weight="bold"), text_color="#e74c3c").pack(pady=(5, 15))
 
-        # --- 卡片3：個人淨資產 ---
+        # --- 卡片3：待收支淨額 ---
         card3 = ctk.CTkFrame(cards_container, fg_color="#1f538d")
         card3.grid(row=0, column=2, padx=5, sticky="ew")
-        ctk.CTkLabel(card3, text="個人淨資產", text_color="gray90").pack(pady=(10, 0))
-        ctk.CTkLabel(card3, text=f"= ${total_assets}", 
+        ctk.CTkLabel(card3, text="待收支淨額 (已確認)", text_color="gray90").pack(pady=(10, 0))
+        ctk.CTkLabel(card3, text=f" ${total_assets:+,}", 
                      font=ctk.CTkFont(size=24, weight="bold"), text_color="white").pack(pady=(5, 15))
 
     def build_inbox(self):
@@ -217,9 +217,16 @@ class PersonalFrame(ctk.CTkFrame):
         history.sort(key=lambda x: str(x['timestamp']), reverse=True)
 
         for item in history[:20]: # 僅顯示前 20 筆
-            hf = ctk.CTkFrame(self.history_frame, fg_color="transparent")
+            hf = ctk.CTkFrame(self.history_frame, fg_color="transparent", height=40)
             hf.pack(fill="x", pady=2)
-            hf.grid_columnconfigure(2, weight=1) # 讓描述這欄自動拉伸
+            hf.grid_propagate(False) # 固定高度
+            
+            # 設定網格權重與寬度，確保跨行對其
+            hf.grid_columnconfigure(0, minsize=100) # 日期
+            hf.grid_columnconfigure(1, minsize=130) # 群組標籤
+            hf.grid_columnconfigure(2, weight=1)     # 描述 (伸縮)
+            hf.grid_columnconfigure(3, minsize=90)  # 狀態標籤
+            hf.grid_columnconfigure(4, minsize=250) # 金額資訊
             
             # 使用跟隊友一致的 YYYY/MM/DD 格式
             if isinstance(item['timestamp'], str):
@@ -231,42 +238,42 @@ class PersonalFrame(ctk.CTkFrame):
             else:
                 date_str = item['timestamp'].strftime('%Y/%m/%d')
 
-            # 1. 日期欄 (固定寬度)
-            ctk.CTkLabel(hf, text=date_str, width=100, anchor="w").grid(row=0, column=0, padx=5, sticky="w")
+            # 1. 日期欄
+            ctk.CTkLabel(hf, text=date_str, font=ctk.CTkFont(size=12), anchor="w").grid(row=0, column=0, padx=(15, 5), sticky="w")
             
-            # 2. 群組標籤 (固定寬度)
+            # 2. 群組標籤
             g_name = item.get('group_name', '未知群組')
             is_personal = "個人私帳" in g_name
             bg_color = "#34495e" if not is_personal else "#2c3e50"
-            group_tag = ctk.CTkLabel(hf, text=g_name, font=ctk.CTkFont(size=11), width=120,
-                                    fg_color=bg_color, corner_radius=6, padx=8)
+            group_tag = ctk.CTkLabel(hf, text=g_name, font=ctk.CTkFont(size=11), width=110,
+                                    fg_color=bg_color, corner_radius=6)
             group_tag.grid(row=0, column=1, padx=5, sticky="w")
             
             # 3. 描述欄 (自動延伸)
             desc_text = item['description'] or '一般支出'
-            ctk.CTkLabel(hf, text=f"{desc_text}", anchor="w").grid(row=0, column=2, padx=10, sticky="ew")
+            ctk.CTkLabel(hf, text=f"{desc_text}", font=ctk.CTkFont(size=13), anchor="w").grid(row=0, column=2, padx=10, sticky="ew")
             
-            # --- 3.5 狀態標籤 (與 GroupFrame 保持一致) ---
+            # --- 3.5 狀態標籤 ---
             st_color, st_text = self._get_status_info(item.get('status', 'PENDING'))
             status_tag = ctk.CTkLabel(hf, text=st_text, font=ctk.CTkFont(size=10, weight="bold"),
-                                    fg_color=st_color, text_color="white", corner_radius=4, width=50)
+                                    fg_color=st_color, text_color="white", corner_radius=4, width=60)
             status_tag.grid(row=0, column=3, padx=10, sticky="w")
             
-            # 4. 金額欄 (固定寬度且靠右)
+            # 4. 金額欄 (靠最右側對齊)
             is_payer = (item['payer_id'] == self.current_user)
             total_amt = item['amount']
             my_share = item.get('my_share', 0)
             
-            amt_info = ctk.CTkFrame(hf, fg_color="transparent", width=220)
-            amt_info.grid(row=0, column=4, padx=10, sticky="e")
+            amt_info = ctk.CTkFrame(hf, fg_color="transparent")
+            amt_info.grid(row=0, column=4, padx=(5, 15), sticky="e")
             
             if is_payer:
                 others_owe = total_amt - my_share
-                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt} (應收回 ${others_owe})", 
-                             text_color="#2ecc71", font=ctk.CTkFont(weight="bold"), anchor="e").pack(anchor="e")
+                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt:,} (應收回 ${others_owe:,})", 
+                             text_color="#2ecc71", font=ctk.CTkFont(size=13, weight="bold"), anchor="e").pack(side="right")
             else:
-                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt} (應付 ${my_share})", 
-                             text_color="#e74c3c", font=ctk.CTkFont(weight="bold"), anchor="e").pack(anchor="e")
+                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt:,} (應付 ${my_share:,})", 
+                             text_color="#e74c3c", font=ctk.CTkFont(size=13, weight="bold"), anchor="e").pack(side="right")
 
             # ── 整合隊友的：點擊查看明細功能 ──
             click_btn = ctk.CTkButton(hf, text="", fg_color="transparent", hover_color="#2c2c2c", 

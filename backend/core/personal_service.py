@@ -47,21 +47,23 @@ class PersonalService(BaseService):
         
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # 應付
+            # 應付 (包含待確認與已確認，由前端自行過濾統計)
             cursor.execute("""
                 SELECT tp.transaction_id, t.payer_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
-                WHERE tp.user_id = ? AND t.payer_id != ? AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
+                WHERE tp.user_id = ? AND t.payer_id != ? 
+                AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
             payables = [{"tx_id": r[0], "creditor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6], "type": r[7]} for r in cursor.fetchall()]
             
-            # 應收
+            # 應收 (包含待確認與已確認)
             cursor.execute("""
                 SELECT tp.transaction_id, tp.user_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
-                WHERE t.payer_id = ? AND tp.user_id != ? AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
+                WHERE t.payer_id = ? AND tp.user_id != ? 
+                AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
             receivables = [{"tx_id": r[0], "debtor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6], "type": r[7]} for r in cursor.fetchall()]
             
@@ -126,16 +128,18 @@ class PersonalService(BaseService):
                      "status": r[5], "payer_id": r[6], "group_name": r[7], "my_share": r[8]} for r in cursor.fetchall()]
 
     def get_user_summary(self, user_id):
-        """獲取使用者與所有人的債務關係簡要總結"""
+        """獲取使用者與所有人的債務關係簡要總結 (僅統計已確認之債務，供儀表板與排序使用)"""
         payables, receivables = self.get_personal_debts(user_id)
         summary = {} # {使用者ID: 餘額}
         
         for p in payables:
-            creditor = p["creditor"]
-            summary[creditor] = summary.get(creditor, 0) - p["amount"]
+            if p["status"] == "CONFIRMED":
+                creditor = p["creditor"]
+                summary[creditor] = summary.get(creditor, 0) - p["amount"]
         
         for r in receivables:
-            debtor = r["debtor"]
-            summary[debtor] = summary.get(debtor, 0) + r["amount"]
+            if r["status"] == "CONFIRMED":
+                debtor = r["debtor"]
+                summary[debtor] = summary.get(debtor, 0) + r["amount"]
             
         return summary

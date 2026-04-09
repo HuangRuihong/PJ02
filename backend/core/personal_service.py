@@ -47,23 +47,25 @@ class PersonalService(BaseService):
         
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # 應付 (包含待確認與已確認，由前端自行過濾統計)
+            # 應付 (包含待確認與已確認，排除已結清或已退回項目)
             cursor.execute("""
                 SELECT tp.transaction_id, t.payer_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE tp.user_id = ? AND t.payer_id != ? 
-                AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
+                AND tp.status != ? AND t.status != 'REJECTED'
+                AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
             payables = [{"tx_id": r[0], "creditor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6], "type": r[7]} for r in cursor.fetchall()]
             
-            # 應收 (包含待確認與已確認)
+            # 應收 (包含待確認與已確認，排除已退回)
             cursor.execute("""
                 SELECT tp.transaction_id, tp.user_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
                 FROM transaction_participants tp
                 JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE t.payer_id = ? AND tp.user_id != ? 
-                AND tp.status != ? AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
+                AND tp.status != ? AND t.status != 'REJECTED'
+                AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
             receivables = [{"tx_id": r[0], "debtor": r[1], "amount": r[2], "date": r[3], "status": r[4], "desc": r[5], "loc": r[6], "type": r[7]} for r in cursor.fetchall()]
             
@@ -128,18 +130,36 @@ class PersonalService(BaseService):
                      "status": r[5], "payer_id": r[6], "group_name": r[7], "my_share": r[8]} for r in cursor.fetchall()]
 
     def get_user_summary(self, user_id):
-        """獲取使用者與所有人的債務關係簡要總結 (僅統計已確認之債務，供儀表板與排序使用)"""
-        payables, receivables = self.get_personal_debts(user_id)
+        """獲取使用者與所有人的債務關係簡要總結 (落實一票否決：僅統計全局狀態為 CONFIRMED 的交易)"""
+        # 這裡需要傳入 t.status 的資訊，或者直接在這裡寫 SQL 會更精準高效
         summary = {} # {使用者ID: 餘額}
         
-        for p in payables:
-            if p["status"] == "CONFIRMED":
-                creditor = p["creditor"]
-                summary[creditor] = summary.get(creditor, 0) - p["amount"]
-        
-        for r in receivables:
-            if r["status"] == "CONFIRMED":
-                debtor = r["debtor"]
-                summary[debtor] = summary.get(debtor, 0) + r["amount"]
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 統計我應付給別人的 (排除 PENDING/REJECTED/SETTLED)
+            cursor.execute("""
+                SELECT t.payer_id, SUM(tp.owed_amount)
+                FROM transaction_participants tp
+                JOIN transactions t ON tp.transaction_id = t.transaction_id
+                WHERE tp.user_id = ? AND t.payer_id != ?
+                AND tp.status = 'CONFIRMED' AND t.status = 'CONFIRMED'
+                AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
+                GROUP BY t.payer_id
+            """, (user_id, user_id))
+            for creditor, amount in cursor.fetchall():
+                summary[creditor] = summary.get(creditor, 0) - amount
             
+            # 統計別人應付給我的 (排除 PENDING/REJECTED/SETTLED)
+            cursor.execute("""
+                SELECT tp.user_id, SUM(tp.owed_amount)
+                FROM transaction_participants tp
+                JOIN transactions t ON tp.transaction_id = t.transaction_id
+                WHERE t.payer_id = ? AND tp.user_id != ?
+                AND tp.status = 'CONFIRMED' AND t.status = 'CONFIRMED'
+                AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
+                GROUP BY tp.user_id
+            """, (user_id, user_id))
+            for debtor, amount in cursor.fetchall():
+                summary[debtor] = summary.get(debtor, 0) + amount
+                
         return summary

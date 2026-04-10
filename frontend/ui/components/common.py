@@ -13,7 +13,7 @@ class LoginFrame(ctk.CTkFrame):
         ctk.CTkCheckBox(self, text="記住帳號，下次自動登入", variable=self.remember_var).pack(pady=10)
         
         self.login_btn = ctk.CTkButton(self, text="進入系統", width=300, height=50, command=self.submit, 
-                                       fg_color="#1f538d", hover_color="#14375e", font=ctk.CTkFont(weight="bold"))
+        fg_color="#1f538d", hover_color="#14375e", font=ctk.CTkFont(weight="bold"))
         self.login_btn.pack(pady=30)
     def submit(self):
         user = self.user_entry.get().strip()

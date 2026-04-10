@@ -94,13 +94,13 @@ class PersonalFrame(ctk.CTkFrame):
             if self.system.settle_specific_debts(payer_id, self.current_user, tx_ids):
                 # 確認還款請求時，將該請求本身也標記為 SETTLED，以免它變成一筆「新債務」造成金額翻轉
                 self.system.confirm_transaction(self.current_user, tx_id, status="SETTLED")
-                messagebox.showinfo("成功", "✅ 已確認收到款項，相關債務已正式銷帳！", parent=self.winfo_toplevel())
+                messagebox.showinfo("成功", "[已確認] 已收到款項，相關債務已正式銷帳！", parent=self.winfo_toplevel())
                 self.winfo_toplevel().refresh_ui()
             else:
                 messagebox.showerror("錯誤", "結清處理失敗！", parent=self.winfo_toplevel())
         else:
             if self.system.confirm_transaction(self.current_user, tx_id):
-                messagebox.showinfo("成功", "✅ 已確認此筆帳款，正式納入結算！", parent=self.winfo_toplevel())
+                messagebox.showinfo("成功", "[已確認] 已確認此筆帳款，正式納入結算！", parent=self.winfo_toplevel())
                 self.winfo_toplevel().refresh_ui()
 
     def do_reject(self, tx_id, tx_type=None):
@@ -111,7 +111,7 @@ class PersonalFrame(ctk.CTkFrame):
             messagebox.showinfo("拒絕", f"❌ 已退回這筆{action_name}。", parent=self.winfo_toplevel())
             self.winfo_toplevel().refresh_ui()
         else:
-            messagebox.showinfo("拒絕", "❌ 已拒絕此筆帳款。(目前後端尚未實作退件機制，僅為前端展示)", parent=self.winfo_toplevel())
+            messagebox.showinfo("拒絕", "[X] 已拒絕此筆帳款。(目前後端尚未實作退件機制，僅為前端展示)", parent=self.winfo_toplevel())
 
     def refresh(self):
         """刷新畫面，每次點擊到這個「我的帳單」分頁時都會呼叫"""
@@ -194,11 +194,11 @@ class PersonalFrame(ctk.CTkFrame):
             right_btns.pack(side="right", padx=15, pady=10)
             
             # 綁定真實的確認與拒絕動作
-            btn_ok = ctk.CTkButton(right_btns, text="✅ 確認", width=60, fg_color="#27ae60", hover_color="#2ecc71",
+            btn_ok = ctk.CTkButton(right_btns, text="確認", width=60, fg_color="#27ae60", hover_color="#2ecc71",
                                    command=lambda tx=item['id'], t=item.get("type"), loc=item.get("loc"), p=item["payer"]: self.do_confirm(tx, t, loc, p))
             btn_ok.pack(side="left", padx=5)
             
-            btn_no = ctk.CTkButton(right_btns, text="❌ 有誤", width=60, fg_color="#c0392b", hover_color="#e74c3c",
+            btn_no = ctk.CTkButton(right_btns, text="有誤", width=60, fg_color="#c0392b", hover_color="#e74c3c",
                                    command=lambda tx=item['id'], t=item.get("type"): self.do_reject(tx, t))
             btn_no.pack(side="left", padx=5)
 

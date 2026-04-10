@@ -70,7 +70,7 @@ class AddFriendDialog(ctk.CTkToplevel):
         self.focus_force()
         
         # UI 配置
-        ctk.CTkLabel(self, text="➕ 加入新好友", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(20, 10))
+        ctk.CTkLabel(self, text="[+] 加入新好友", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(20, 10))
         
         # 1. ID 輸入區
         input_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -91,7 +91,7 @@ class AddFriendDialog(ctk.CTkToplevel):
         
         ctk.CTkLabel(btns_frame, text="--- 或者 ---", text_color="gray").pack(pady=5)
         
-        self.scan_btn = ctk.CTkButton(btns_frame, text="📷 掃描名片圖片", height=40, 
+        self.scan_btn = ctk.CTkButton(btns_frame, text="[掃描] 掃描名片圖片", height=40, 
                                      fg_color="#34495e", hover_color="#2c3e50",
                                      command=self.trigger_scan)
         self.scan_btn.pack(fill="x", pady=5)
@@ -168,7 +168,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
         # ── 進階選項（預設展開）──────────────────────────
         self.show_extra = True
         self.extra_btn = ctk.CTkButton(
-            self, text="🔼 隱藏進階選項",
+            self, text="^ 隱藏進階選項",
             fg_color="transparent", text_color="gray", hover_color="#2c2c2c",
             command=self.toggle_extra
         )
@@ -218,7 +218,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
 
         # ── 提交按鈕 ───────────────────────────────────────
         self.submit_btn = ctk.CTkButton(
-            self, text="✅ 確認提交並生成帳項",
+            self, text="(o) 確認提交並生成帳項",
             command=self.submit,
             fg_color="#2ecc71", hover_color="#27ae60",
             height=45, font=ctk.CTkFont(weight="bold")
@@ -230,10 +230,10 @@ class AddTransactionDialog(ctk.CTkToplevel):
         """切換顯示/隱藏進階選項"""
         if self.show_extra:
             self.extra_frame.pack_forget()
-            self.extra_btn.configure(text="🔽 更多選項 (地點/模式)")
+            self.extra_btn.configure(text="v 更多選項 (地點/模式)")
         else:
             self.extra_frame.pack(after=self.extra_btn, fill="x")
-            self.extra_btn.configure(text="🔼 隱藏進階選項")
+            self.extra_btn.configure(text="^ 隱藏進階選項")
         self.show_extra = not self.show_extra
 
     def toggle_mode(self, _=None):
@@ -298,11 +298,11 @@ class AddTransactionDialog(ctk.CTkToplevel):
         if total == 0:
             self.balance_label.configure(text="", text_color="gray")
         elif diff == 0:
-            self.balance_label.configure(text=f"✅ 已全額分配：${total}", text_color="#2ecc71")
+            self.balance_label.configure(text=f"[已全額分配]：${total}", text_color="#2ecc71")
         elif diff > 0:
-            self.balance_label.configure(text=f"⚠️ 尚有 ${diff} 未分配（已分 ${assigned} / 總額 ${total}）", text_color="#e67e22")
+            self.balance_label.configure(text=f"尚有 ${diff} 未分配（已分 ${assigned} / 總額 ${total}）", text_color="#e67e22")
         else:
-            self.balance_label.configure(text=f"❌ 超出分配 ${abs(diff)}（已分 ${assigned} / 總額 ${total}）", text_color="#e74c3c")
+            self.balance_label.configure(text=f"超出分配 ${abs(diff)}（已分 ${assigned} / 總額 ${total}）", text_color="#e74c3c")
 
     def submit(self):
         """提交交易數據到主程式"""
@@ -402,7 +402,7 @@ class TransactionDetailDialog(ctk.CTkToplevel):
         info_frame.pack(fill="x", padx=30, pady=10)
         
         loc = self.details['loc'] or "未提供地點"
-        ctk.CTkLabel(info_frame, text=f" 📍 地點: {loc}").pack(anchor="w", padx=20, pady=5)
+        ctk.CTkLabel(info_frame, text=f" [地點]: {loc}").pack(anchor="w", padx=20, pady=5)
         
         # 格式化顯示時間
         raw_time = self.details['time']
@@ -410,7 +410,7 @@ class TransactionDetailDialog(ctk.CTkToplevel):
             display_time = raw_time[:10].replace('-', '/')
         else:
             display_time = raw_time.strftime('%Y/%m/%d')
-        ctk.CTkLabel(info_frame, text=f" 📅 時間: {display_time}").pack(anchor="w", padx=20, pady=5)
+        ctk.CTkLabel(info_frame, text=f" [日期]: {display_time}").pack(anchor="w", padx=20, pady=5)
         ctk.CTkLabel(info_frame, text=f" 付款人: {self.details['payer']}").pack(anchor="w", padx=20, pady=5)
         
         # 參與者清單區
@@ -423,10 +423,11 @@ class TransactionDetailDialog(ctk.CTkToplevel):
             pf = ctk.CTkFrame(scroll, fg_color="transparent")
             pf.pack(fill="x", pady=2)
             
-            # 狀態圖示
-            status_icon = "✅" if p['status'] == 'CONFIRMED' else "⏳" if p['status'] == 'PENDING' else "💰" if p['status'] == 'SETTLED' else "❌"
+            # 狀態文字替代圖示
+            status_map = {'CONFIRMED': '(已確認)', 'PENDING': '(待處理)', 'SETTLED': '(已結清)', 'REJECTED': '(有誤)'}
+            status_text = status_map.get(p['status'], f"({p['status']})")
             
-            ctk.CTkLabel(pf, text=f"{status_icon} {p['user_id']}").pack(side="left", padx=10)
+            ctk.CTkLabel(pf, text=f"{status_text} {p['user_id']}").pack(side="left", padx=10)
             ctk.CTkLabel(pf, text=f"${p['amount']}").pack(side="right", padx=10)
             
             # 如果是當前使用者 且 尚未結清 且 不是付款人 → 顯示「還款」按鈕
@@ -450,7 +451,7 @@ class TransactionDetailDialog(ctk.CTkToplevel):
         # 僅付款人可刪除交易 (防呆)
         if self.current_user == self.details['payer']:
             ctk.CTkButton(
-                btn_frame, text="🗑️ 刪除交易", 
+                btn_frame, text="[刪除] 刪除交易", 
                 fg_color="#e74c3c", hover_color="#c0392b",
                 command=self.do_delete, width=100
             ).pack(side="left", padx=10)

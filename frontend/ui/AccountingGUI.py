@@ -132,7 +132,7 @@ class AccountingGUI(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self.main_container, width=200, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         
-        self.user_label = ctk.CTkLabel(self.sidebar, text=f"👤 {self.current_user}", font=ctk.CTkFont(size=16, weight="bold"))
+        self.user_label = ctk.CTkLabel(self.sidebar, text=f"使用者: {self.current_user}", font=ctk.CTkFont(size=16, weight="bold"))
         self.user_label.pack(pady=(30, 5))
         
         self.logout_btn = ctk.CTkButton(self.sidebar, text="登出系統", command=self.logout, 

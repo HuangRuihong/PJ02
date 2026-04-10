@@ -15,11 +15,11 @@ pip install -r requirements.txt
 ### 2. 啟動應用程式
 在專案根目錄下直接執行以下命令即可開啟圖形化介面：
 ```bash
-python run.py
+python run_app.py
 ```
 
-### 3. 加入測試情境
-您可以查看 `tests/test_japan_trip.py`，裡面完整示範了五人日本旅遊的「發起、確認、拒絕、還款」全自動化操作流程。
+
+---
 
 ---
 
@@ -31,11 +31,15 @@ python run.py
 
 ---
 
-## 📂 資料夾架構
-*   `backend/` - 資料庫服務與業務邏輯核心。
-*   `frontend/` - 基於 CustomTkinter 的圖形化 UI 模組。
-*   `tests/` - 自動化測試與情境模擬腳本。
-*   `工具/` - 完整的技術手冊、專案計畫與情境計畫書。
+## 📂 目錄架構 (Project Modules)
+*   **`intelligence/`** - 智慧全域債務狀態機 (State Machine) 與結算核心。
+*   **`shared/`** - 共用資料模型、對話框組件及 SQLite 資料庫存放。
+*   **`groups/`** - 多人群組管理與多人同步邏輯。
+*   **`personal/`** - 個人支出的流水記帳與好友系統。
+*   **`analysis/`** - 視覺化報表統計與日曆視圖。
+*   **`auth/`** - 權限驗證與自動登入系統。
+*   **`doc/`** - 完整的技術手冊、架構說明與 SQL Schema。
+*   **`tools/`** - 自動化維護、上傳與資料庫遷移工具。
 
 ---
 

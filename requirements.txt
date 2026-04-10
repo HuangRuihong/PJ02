@@ -4,3 +4,5 @@ qrcode
 matplotlib
 tkcalendar
 schedule
+pyzbar
+opencv-python

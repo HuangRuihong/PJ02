@@ -36,7 +36,7 @@ def upload():
     print("\n[3/3] 正在推送到伺服器 (git push)...")
     if run_command("git push origin main", cwd=root_dir):
         print("\n" + "="*40)
-        print("   ✅ 上傳成功！")
+        print("   [成功] 上傳完成！")
         print("="*40)
     else:
         print("\n[失敗] 推送過程中發生錯誤，請檢查網路或衝突。")

@@ -34,7 +34,7 @@ def upload():
     if not run_command(f'git commit -m "{msg}"', cwd=root_dir): return
     
     print("\n[3/3] 正在推送到伺服器 (git push)...")
-    if run_command("git push origin main", cwd=root_dir):
+    if run_command("git push origin master", cwd=root_dir):
         print("\n" + "="*40)
         print("   [成功] 上傳完成！")
         print("="*40)

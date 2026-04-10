@@ -9,7 +9,7 @@ class LoginFrame(ctk.CTkFrame):
         ctk.CTkLabel(self, text="記帳系統", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=(100, 20))
         ctk.CTkLabel(self, text="歡迎回來，請輸入帳號進入系統", font=ctk.CTkFont(size=14), text_color="gray70").pack(pady=(0, 40))
         self.user_entry = ctk.CTkEntry(self, placeholder_text="使用者名稱", width=300, height=45); self.user_entry.pack(pady=10)
-        self.remember_var = ctk.BooleanVar(value=True)
+        self.remember_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(self, text="記住帳號，下次自動登入", variable=self.remember_var).pack(pady=10)
         
         self.login_btn = ctk.CTkButton(self, text="進入系統", width=300, height=50, command=self.submit, 

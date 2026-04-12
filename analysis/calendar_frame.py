@@ -77,33 +77,45 @@ class CalendarFrame(ctk.CTkFrame):
                 
                 # 1. 群組標籤 (小小的灰色)
                 group_name = tx.get('group_name', '一般')
-                ctk.CTkLabel(f, text=f"[{group_name}]", font=ctk.CTkFont(size=12)).grid(row=0, column=0, padx=10, pady=10, sticky="w")
+                gl = ctk.CTkLabel(f, text=f"[{group_name}]", font=ctk.CTkFont(size=12))
+                gl.grid(row=0, column=0, padx=10, pady=10, sticky="w")
                 
                 # 2. 描述
-                ctk.CTkLabel(f, text=tx['description'] or "一般支出", font=ctk.CTkFont(size=14), anchor="w").grid(row=0, column=1, padx=5, sticky="ew")
+                dl = ctk.CTkLabel(f, text=tx['description'] or "一般支出", font=ctk.CTkFont(size=14), anchor="w")
+                dl.grid(row=0, column=1, padx=5, sticky="ew")
                 
                 # 3. 金額明細
                 is_payer = (tx.get('payer_id') == self.current_user)
                 amt_color = "#2ecc71" if is_payer else "#e74c3c"
                 amt_text = f"+${tx['amount']}" if is_payer else f"-${tx['amount']}"
                 
-                amt_frame = ctk.CTkFrame(f, fg_color="transparent")
-                amt_frame.grid(row=0, column=2, padx=15, sticky="e")
+                af = ctk.CTkFrame(f, fg_color="transparent")
+                af.grid(row=0, column=2, padx=15, sticky="e")
                 
-                ctk.CTkLabel(amt_frame, text=amt_text, text_color=amt_color, font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="e")
+                al = ctk.CTkLabel(af, text=amt_text, text_color=amt_color, font=ctk.CTkFont(size=15, weight="bold"))
+                al.pack(anchor="e")
                 
                 status_map = {"CONFIRMED": "已確認", "PENDING": "待確認", "SETTLED": "已結清", "REJECTED": "已拒絕"}
                 status_text = status_map.get(tx['status'], tx['status'])
-                ctk.CTkLabel(amt_frame, text=status_text, font=ctk.CTkFont(size=11), text_color="gray").pack(anchor="e")
+                sl = ctk.CTkLabel(af, text=status_text, font=ctk.CTkFont(size=11), text_color="gray")
+                sl.pack(anchor="e")
 
-                # 4. 透明點擊層
-                click_btn = ctk.CTkButton(f, text="", fg_color="transparent", hover_color="#34495e", 
-                                         command=lambda tid=tx['id']: self.show_detail(tid))
-                click_btn.place(relx=0, rely=0, relwidth=1, relheight=1)
+                # 4. 點擊與懸停互動邏輯
+                def on_click(event, tid=tx['id']):
+                    self.show_detail(tid)
                 
-                # 提升所有標籤層級以避免被透明按鈕完全擋住點擊後的視覺回饋 (選用)
-                for child in f.winfo_children():
-                    if child != click_btn: child.lift()
+                def on_enter(event, frame=f):
+                    frame.configure(fg_color="#34495e")
+                
+                def on_leave(event, frame=f, original_color="#2c3e50" if tx.get('status') != 'SETTLED' else "transparent"):
+                    frame.configure(fg_color=original_color)
+
+                # 遞迴將事件綁定到容器及其所有子元件上
+                for widget in [f, gl, dl, af, al, sl]:
+                    widget.bind("<Button-1>", on_click)
+                    widget.bind("<Enter>", on_enter)
+                    widget.bind("<Leave>", on_leave)
+                    widget.configure(cursor="hand2")
 
         if not found:
             ctk.CTkLabel(self.detail_scroll, text="該日無任何交易明細記錄", text_color="gray").pack(pady=30)

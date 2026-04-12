@@ -119,7 +119,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
     MODE_CUSTOM       = "手動自訂"
     MODE_PRIVATE      = "個人私帳"
 
-    def __init__(self, parent, members, callback, pre_selected=None):
+    def __init__(self, parent, members, callback, pre_selected=None, initial_data=None):
         super().__init__(parent)
         self.title("記一筆消費")
         self.geometry("450x780")
@@ -161,7 +161,7 @@ class AddTransactionDialog(ctk.CTkToplevel):
             foreground='white', borderwidth=2, 
             date_pattern='yyyy/mm/dd',
             headersbackground='#2c3e50', headersforeground='white',
-            selectbackground='#3498db'
+            selectbackground='#3498db', state='readonly'
         )
         self.date_entry.pack(side="left", padx=5)
 
@@ -218,12 +218,59 @@ class AddTransactionDialog(ctk.CTkToplevel):
 
         # ── 提交按鈕 ───────────────────────────────────────
         self.submit_btn = ctk.CTkButton(
-            self, text="(o) 確認提交並生成帳項",
+            self, text="儲存變更" if initial_data else "(o) 確認提交並生成帳項",
             command=self.submit,
             fg_color="#2ecc71", hover_color="#27ae60",
             height=45, font=ctk.CTkFont(weight="bold")
         )
         self.submit_btn.pack(pady=15, padx=40, fill="x")
+        
+        self.initial_data = initial_data
+        if self.initial_data:
+            self.load_initial_data()
+        else:
+            self.auto_split()
+
+    def load_initial_data(self):
+        """用於編輯模式：載入原本的資料並設為自訂模式以確保金額精確一致"""
+        self.title("編輯帳單")
+        self.payer_var.set(self.initial_data.get('payer', self.current_user))
+        if self.initial_data.get('desc'):
+            self.desc_entry.insert(0, self.initial_data.get('desc'))
+        self.amt_entry.insert(0, str(self.initial_data.get('amount', 0)))
+        
+        if self.initial_data.get('loc'):
+            if not self.show_extra: self.toggle_extra()
+            self.loc_entry.insert(0, self.initial_data.get('loc'))
+            
+        raw_ts = self.initial_data.get('time')
+        if raw_ts:
+            try:
+                from datetime import datetime
+                if isinstance(raw_ts, str):
+                    d = datetime.fromisoformat(raw_ts) if ":" in raw_ts else datetime.strptime(raw_ts[:10], "%Y-%m-%d")
+                else: d = raw_ts
+                self.date_entry.set_date(d.date())
+            except: pass
+
+        self.mode_var.set(self.MODE_PRIVATE if self.initial_data.get('group_id') == 'PERSONAL' else self.MODE_CUSTOM)
+        if self.mode_var.get() == self.MODE_CUSTOM and not self.show_extra:
+            self.toggle_extra()
+
+        for m, cb in self.check_vars.items():
+            cb.set(0)
+            self.split_entries[m].configure(state="normal")
+            self.split_entries[m].delete(0, "end")
+            self.split_entries[m].insert(0, "0")
+
+        for p in self.initial_data.get('participants', []):
+            uid = p['user_id']
+            if uid in self.check_vars:
+                self.check_vars[uid].set(1)
+                self.split_entries[uid].configure(state="normal")
+                self.split_entries[uid].delete(0, "end")
+                self.split_entries[uid].insert(0, str(p['amount']))
+        
         self.auto_split()
 
     def toggle_extra(self):

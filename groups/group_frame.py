@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from datetime import datetime
 from shared.dialogs import TransactionDetailDialog, BudgetDialog
 
 
@@ -106,7 +107,27 @@ class GroupFrame(ctk.CTkFrame):
         for w in self.scroll.winfo_children(): w.destroy()
         
         txs = self.system.get_group_transactions(gid)
+        last_date = None
         for tx in txs:
+            # 取得並格式化日期
+            raw_time = tx['time']
+            try:
+                if isinstance(raw_time, str):
+                    dt = datetime.fromisoformat(raw_time) if " " in raw_time or "T" in raw_time else datetime.strptime(raw_time[:10], '%Y-%m-%d')
+                else:
+                    dt = raw_time
+                date_str = dt.strftime('%m月%d日')
+            except:
+                date_str = str(raw_time)[:10].replace('-', '/')
+
+            # 插入日期分隔線
+            if date_str != last_date:
+                sep_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
+                sep_frame.pack(fill="x", pady=(15, 5))
+                ctk.CTkLabel(sep_frame, text=f"{date_str} ---------------------------------", 
+                             font=ctk.CTkFont(size=12, weight="bold"), text_color="gray70").pack(side="left", padx=10)
+                last_date = date_str
+
             f = ctk.CTkFrame(self.scroll); f.pack(fill="x", pady=5)
             
             # --- 左側：狀態標籤 ---
@@ -126,18 +147,52 @@ class GroupFrame(ctk.CTkFrame):
             status_tag.bind("<Double-1>", lambda e, tid=tx['id']: self.show_details(tid))
             
             if current_user in tx['pending_confirmations']:
+                right_btns = ctk.CTkFrame(f, fg_color="transparent")
+                right_btns.pack(side="right", padx=5)
+                
+                # 有誤 (Reject)
+                ctk.CTkButton(right_btns, text="有誤", width=60, fg_color="#c0392b", hover_color="#e74c3c",
+                              command=lambda tid=tx['id']: self.winfo_toplevel().reject_tx(tid)).pack(side="left", padx=5)
+                              
+                # 確認
                 btn_text = "確認收錢" if tx['type'] == 'SETTLEMENT' else "確認"
-                ctk.CTkButton(f, text=btn_text, width=80, command=lambda tid=tx['id']: self.winfo_toplevel().confirm_tx(tid)).pack(side="right", padx=5)
+                ctk.CTkButton(right_btns, text=btn_text, width=60, fg_color="#27ae60", hover_color="#2ecc71",
+                              command=lambda tid=tx['id']: self.winfo_toplevel().confirm_tx(tid)).pack(side="left", padx=5)
             
-            # 只有付款人可以看到「催帳」按鈕來提醒他人
-            # 只有付款人可以看到提醒按鈕
-            if current_user == tx['payer'] and tx['pending_confirmations']:
-                remind_text = "提醒確認" if tx['type'] == 'SETTLEMENT' else "催帳"
-                ctk.CTkButton(f, text=remind_text, width=80, fg_color="#d35400", hover_color="#a04000",
-                command=lambda tid=tx['id']: self.handle_notify(tid)).pack(side="right", padx=5)
+            # 只有付款人可以針對帳單的狀態進行特定處置
+            if current_user == tx['payer']:
+                # 只有未完全確認 (PENDING) 或被退回 (REJECTED) 的帳單才可以被重新編輯
+                if tx['status'] in ['PENDING', 'REJECTED']:
+                    ctk.CTkButton(f, text="重新編輯", width=80, fg_color="#3498db", hover_color="#2980b9",
+                                  command=lambda tid=tx['id']: self.winfo_toplevel().open_edit_tx(tid)).pack(side="right", padx=5)
+                                  
+                if tx['status'] == 'REJECTED':
+                    # 付款人看到帳單被退回，可以選擇作廢（刪除）
+                    ctk.CTkButton(f, text="作廢(刪除)", width=80, fg_color="#c0392b", hover_color="#922b21",
+                                  command=lambda tid=tx['id']: self.handle_void_tx(tid)).pack(side="right", padx=5)
+                elif tx['pending_confirmations']:
+                    # 付款人針對尚未確認的帳單進行催收
+                    remind_text = "提醒確認" if tx['type'] == 'SETTLEMENT' else "催帳"
+                    ctk.CTkButton(f, text=remind_text, width=80, fg_color="#d35400", hover_color="#a04000",
+                                  command=lambda tid=tx['id']: self.handle_notify(tid)).pack(side="right", padx=5)
 
     def open_add_tx(self):
         self.winfo_toplevel().open_add_tx()
+
+    def handle_void_tx(self, tid):
+        """處理作廢帳款的請求"""
+        from tkinter import messagebox
+        confirm = messagebox.askyesno(
+            "作廢帳單", 
+            "此筆帳單已被某位成員標記為「有誤」。\n您是否要作廢(徹底刪除)這筆帳單？\n\n(若需補收，請在作廢後重新發起一筆新的帳單)", 
+            parent=self.winfo_toplevel()
+        )
+        if confirm:
+            if self.system.delete_transaction(tid):
+                messagebox.showinfo("作廢成功", "已成功作廢並刪除該筆錯誤帳單。", parent=self.winfo_toplevel())
+                self.winfo_toplevel().refresh_ui()
+            else:
+                messagebox.showerror("錯誤", "作廢失敗，請確認您的伺服器或資料庫狀態。", parent=self.winfo_toplevel())
 
     def handle_refresh(self):
         """手動刷新介面：重新查詢群組清單，可偵測到他人刪除群組的變化"""

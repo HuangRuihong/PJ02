@@ -213,10 +213,28 @@ class PersonalFrame(ctk.CTkFrame):
             return
 
         # 確保排序：最新在最上方 (降序)
-        # 有些可能是字串有些是 datetime，統一轉字串比較穩定
         history.sort(key=lambda x: str(x['timestamp']), reverse=True)
 
+        last_date = None
         for item in history[:20]: # 僅顯示前 20 筆
+            # 解析日期格式為 M月D日
+            raw_ts = item['timestamp']
+            try:
+                if isinstance(raw_ts, str):
+                    dt = datetime.fromisoformat(raw_ts) if " " in raw_ts or "T" in raw_ts else datetime.strptime(raw_ts[:10], '%Y-%m-%d')
+                else:
+                    dt = raw_ts
+                curr_date = dt.strftime('%m月%d日')
+            except:
+                curr_date = str(raw_ts)[:10].replace('-', '/')
+
+            if curr_date != last_date:
+                sep_f = ctk.CTkFrame(self.history_frame, fg_color="transparent")
+                sep_f.pack(fill="x", pady=(15, 5))
+                ctk.CTkLabel(sep_f, text=f"{curr_date} ---------------------------------", 
+                             font=ctk.CTkFont(size=12, weight="bold"), text_color="gray70").pack(side="left", padx=10)
+                last_date = curr_date
+
             hf = ctk.CTkFrame(self.history_frame, fg_color="transparent", height=40)
             hf.pack(fill="x", pady=2)
             hf.grid_propagate(False) # 固定高度

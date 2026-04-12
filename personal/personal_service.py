@@ -120,7 +120,7 @@ class PersonalService(BaseService):
             # 取得該用戶作為 Payer 或是參與者的所有交易
             cursor.execute("""
                 SELECT t.transaction_id, t.group_id, t.amount, t.description, t.timestamp, t.status, t.payer_id, 
-                       CASE WHEN t.group_id = 'PERSONAL' THEN '👤 個人私帳' ELSE COALESCE(g.name, t.group_id) END as group_name,
+                       CASE WHEN t.group_id = 'PERSONAL' THEN '[個人私帳]' ELSE COALESCE(g.name, t.group_id) END as group_name,
                        tp.owed_amount
                 FROM transactions t
                 JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id

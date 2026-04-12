@@ -131,6 +131,57 @@ class GroupService(BaseService):
                 print(f"Error: {e}")
                 return False
 
+    def update_transaction(self, transaction_id, amount_float, participants, custom_splits=None, description='', location='', timestamp=None):
+        """修改一筆現有的帳單：將強迫所有參與者重置為 PENDING 狀態並更新主表金額等設定"""
+        from shared.models import TransactionStatus
+        from datetime import datetime
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                # 1. 取得現有主表資訊確保原本的群組與付款人存在
+                cursor.execute("SELECT group_id, payer_id, type FROM transactions WHERE transaction_id = ?", (transaction_id,))
+                row = cursor.fetchone()
+                if not row: return False
+                group_id, payer_id, tx_type = row
+                
+                amount_twd = int(amount_float)
+                actual_ts = timestamp if timestamp else datetime.now()
+                
+                # 計算要分攤的債務
+                splits = {}
+                if custom_splits and len(custom_splits) > 0:
+                    splits = custom_splits
+                else:
+                    if len(participants) > 0:
+                        base = amount_twd // len(participants)
+                        rem = amount_twd % len(participants)
+                        for i, uid in enumerate(participants):
+                            splits[uid] = base + (1 if i < rem else 0)
+                
+                # 2. 更新主表內容
+                cursor.execute("""
+                    UPDATE transactions 
+                    SET amount = ?, description = ?, location = ?, timestamp = ?, status = ?
+                    WHERE transaction_id = ?
+                """, (amount_twd, description, location, actual_ts, TransactionStatus.PENDING.name, transaction_id))
+                
+                # 3. 抹除舊有參與者紀錄，重新建立（所有人變為 PENDING，付款人強制確認）
+                cursor.execute("DELETE FROM transaction_participants WHERE transaction_id = ?", (transaction_id,))
+                
+                for uid, owed in splits.items():
+                    status = TransactionStatus.CONFIRMED.name if uid == payer_id else TransactionStatus.PENDING.name
+                    cursor.execute("""
+                        INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status)
+                        VALUES (?, ?, ?, ?)
+                    """, (transaction_id, uid, owed, status))
+                
+                # 4. 立即檢查狀態機
+                self._update_main_transaction_status(cursor, transaction_id)
+                return True
+            except Exception as e:
+                print(f"Update TX Error: {e}")
+                return False
+
     def confirm_transaction(self, user_id, transaction_id, status=None):
         """參與者確認交易項目 (預設為 CONFIRMED，若為還款可指定為 SETTLED)"""
         target_status = status if status else TransactionStatus.CONFIRMED.name

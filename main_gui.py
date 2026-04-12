@@ -298,10 +298,54 @@ class AccountingGUI(ctk.CTk):
         if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc, timestamp=actual_date): 
             self.refresh_ui()
 
+    def open_edit_tx(self, tid):
+        """開啟特定帳單的編輯對話框"""
+        details = self.system.get_transaction_details(tid)
+        if not details: return
+        members = self.system.get_group_members(details['group_id']) if details['group_id'] != 'PERSONAL' else [self.current_user]
+        
+        def commit_edit(amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None):
+            from tkinter import messagebox
+            from datetime import datetime
+            
+            # Timestamp parsing mimicking add_tx_cb
+            actual_date = datetime.now()
+            if date:
+                 try:
+                     d = datetime.strptime(date, "%Y-%m-%d")
+                     now = datetime.now()
+                     actual_date = d.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+                 except: pass
+
+            if self.system.update_transaction(
+                transaction_id=tid, 
+                amount_float=amt, 
+                participants=sel, 
+                custom_splits=custom, 
+                description=desc, 
+                location=loc,
+                timestamp=actual_date
+            ):
+                messagebox.showinfo("更新成功", "這筆帳單已經更新，並重置為「待確認」狀態退回給相關參與者。", parent=self)
+                self.refresh_ui()
+            else:
+                messagebox.showerror("錯誤", "更新失敗，請檢查資料庫狀態。", parent=self)
+                
+        AddTransactionDialog(self, members, commit_edit, initial_data=details)
+
     def confirm_tx(self, tid): 
         """確認交易狀態"""
         self.system.confirm_transaction(self.current_user, tid)
         self.refresh_ui()
+
+    def reject_tx(self, tid):
+        """拒絕/退回交易"""
+        from tkinter import messagebox
+        if hasattr(self.system, "reject_transaction") and self.system.reject_transaction(self.current_user, tid):
+            messagebox.showinfo("拒絕", "[ 退回 ] 已退回這筆帳款，請付款人修正。")
+            self.refresh_ui()
+        else:
+            messagebox.showinfo("拒絕", "[X] 已拒絕此筆帳款。(目前後端尚未實作退件機制，僅為前端展示)")
 
     def run_settlement(self, mode="ORIGINAL"):
         """執行結算邏輯"""

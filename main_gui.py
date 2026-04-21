@@ -59,6 +59,9 @@ class AccountingGUI(ctk.CTk):
         self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.scheduler_thread.start()
         
+        # 啟動「每 5 秒自動同步刷新」功能 (演示專用)
+        self.after(5000, self.auto_refresh_loop)
+        
         # 檢查自動登入狀態
         self.check_auto_login()
 
@@ -228,6 +231,15 @@ class AccountingGUI(ctk.CTk):
         
         try: self.tab_c.refresh(self.current_group_id)
         except Exception as e: print(f"Refresh Calendar Error: {e}")
+
+    def auto_refresh_loop(self):
+        """定時觸發刷新，讓兩台電腦即時同步 (每 5 秒)"""
+        if self.current_user:
+            try:
+                self.refresh_ui()
+            except: pass
+        # 持續循環
+        self.after(5000, self.auto_refresh_loop)
 
     def switch_group(self, name):
         """切換目前活動群組"""

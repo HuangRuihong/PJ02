@@ -19,7 +19,7 @@ def upload():
     print("="*40)
     
     # 1. 檢查狀態
-    print("\n[1/3] 正在掃描變動檔案...")
+    print("\n[1/3] 正在掃描變動檔案 (包含資料庫)...")
     run_command("git status -s", cwd=root_dir)
     
     # 2. 輸入訊息

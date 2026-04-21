@@ -3,12 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# SQLite databases (Keep production data out of Git to avoid merge conflicts)
-backend/data/accounting.db
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
+# SQLite databases (MODIFIED: Enabled for Git Sync)
+# backend/data/accounting.db
+# *.db
+# *.db-journal
+# *.db-shm
+# *.db-wal
 
 # QR code images
 backend/data/qr_*.png

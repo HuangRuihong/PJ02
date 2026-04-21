@@ -38,6 +38,15 @@ class TransactionProposal(BaseModel):
     location: str = ""
     timestamp: Optional[str] = None
 
+class TransactionUpdate(BaseModel):
+    transaction_id: str
+    amount: float
+    participants: List[str]
+    custom_splits: Optional[Dict[str, float]] = None
+    description: str = ""
+    location: str = ""
+    timestamp: Optional[str] = None
+
 class ConfirmRequest(BaseModel):
     user_id: str
     transaction_id: str
@@ -81,6 +90,21 @@ async def propose_transaction(data: TransactionProposal):
     )
     if not success:
         raise HTTPException(status_code=400, detail="Failed to propose transaction")
+    return {"success": True}
+
+@app.post("/api/transaction/update")
+async def update_transaction(data: TransactionUpdate):
+    ts = None
+    if data.timestamp:
+        try: ts = datetime.fromisoformat(data.timestamp)
+        except: pass
+    
+    success = group_service.update_transaction(
+        data.transaction_id, data.amount, data.participants,
+        data.custom_splits, data.description, data.location, ts
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update transaction")
     return {"success": True}
 
 @app.post("/api/transaction/confirm")

@@ -63,6 +63,20 @@ class NetworkDebtSystem:
         res = self._post("/api/transaction/propose", data)
         return res.get("success", False)
 
+    def update_transaction(self, transaction_id, amount_float, participants, 
+                          custom_splits=None, description="", location="", timestamp=None):
+        data = {
+            "transaction_id": transaction_id,
+            "amount": float(amount_float),
+            "participants": participants,
+            "custom_splits": custom_splits,
+            "description": description,
+            "location": location,
+            "timestamp": timestamp.isoformat() if timestamp else None
+        }
+        res = self._post("/api/transaction/update", data)
+        return res.get("success", False)
+
     def confirm_transaction(self, user_id, transaction_id, status=None):
         res = self._post("/api/transaction/confirm", {"user_id": user_id, "transaction_id": transaction_id, "status": status})
         return res.get("success", False)

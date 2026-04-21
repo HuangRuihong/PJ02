@@ -28,8 +28,13 @@ if __name__ == "__main__":
             from intelligence.network_facade import NetworkDebtSystem
             print(f"   Server address: {args.host}")
             system = NetworkDebtSystem(base_url=args.host)
-        except ImportError:
-            print("   警告：找不到網路模組，將嘗試以本地模式啟動。")
+        except ImportError as e:
+            print(f"   [錯誤] 無法載入網路模組 ({e})")
+            print("   [提示] 請檢查是否已安裝 requests 套件：pip install requests")
+            print("   將嘗試以本地模式啟動...")
+            system = None
+        except Exception as e:
+            print(f"   [錯誤] 網路系統初始化失敗: {e}")
             system = None
     else:
         print("   Status: Offline database enabled")

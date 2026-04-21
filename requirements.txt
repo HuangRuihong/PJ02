@@ -6,3 +6,6 @@ tkcalendar
 schedule
 pyzbar
 opencv-python
+requests
+fastapi
+uvicorn

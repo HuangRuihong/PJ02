@@ -41,9 +41,4 @@ CREATE TABLE IF NOT EXISTS transaction_participants (
     FOREIGN KEY (transaction_id) REFERENCES transactions(transaction_id)
 );
 
--- 好友表
-CREATE TABLE IF NOT EXISTS friends (
-    user_id TEXT,
-    friend_id TEXT,
-    PRIMARY KEY (user_id, friend_id)
-);
+

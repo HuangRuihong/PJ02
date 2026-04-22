@@ -15,20 +15,13 @@ import tkinter.messagebox as mbox
 from intelligence.debt_system import DebtSystem
 from shared.models import TransactionStatus, TransactionType
 from auth.auth_ui import LoginFrame
-from shared.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog, QRDialog, AddFriendDialog
+from shared.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog, QRDialog
 from personal.personal_frame import PersonalFrame
 from groups.group_frame import GroupFrame
-from personal.friends_frame import FriendsFrame
 from analysis.analysis_frame import AnalysisFrame
 from analysis.calendar_frame import CalendarFrame
 
-try:
-    from pyzbar.pyzbar import decode
-    import cv2
-    import numpy as np
-    SCAN_SUPPORT = True
-except ImportError:
-    SCAN_SUPPORT = False
+
 
 # 設定檔路徑改為 shared/data/ 下
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared", "data", "config.json")
@@ -170,11 +163,6 @@ class AccountingGUI(ctk.CTk):
         
         ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
         
-        self.tab_f = FriendsFrame(scroll_p, self.system, self.current_user)
-        self.tab_f.pack(fill="x", pady=30)
-        
-        ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
-        
         self.tab_c = CalendarFrame(scroll_p, self.system, self.current_user)
         self.tab_c.pack(fill="x", pady=30)
         
@@ -222,9 +210,6 @@ class AccountingGUI(ctk.CTk):
         
         try: self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
         except Exception as e: print(f"Refresh Group Error: {e}")
-        
-        try: self.tab_f.refresh(self.current_user)
-        except Exception as e: print(f"Refresh Friends Error: {e}")
         
         try: self.tab_a.refresh(self.current_group_id)
         except Exception as e: print(f"Refresh Analysis Error: {e}")
@@ -277,7 +262,7 @@ class AccountingGUI(ctk.CTk):
         """側邊欄全局快速記帳：直接與當前群組功能綁定"""
         if not self.current_group_id:
             from tkinter import messagebox
-            messagebox.showwarning("提示", "請先選擇右上角群組，或進入好友卡片點擊發起私帳！", parent=self)
+            messagebox.showwarning("提示", "請先選擇右上角群組！", parent=self)
             return
         self.open_add_tx()
 
@@ -369,31 +354,6 @@ class AccountingGUI(ctk.CTk):
     def show_my_qr(self): 
         """顯示個人 QR Code 名片"""
         QRDialog(self, self.system.generate_qr_path(self.current_user), self.current_user)
-
-    def scan_qr_from_file(self):
-        """掃描本地圖片文件以加入好友"""
-        if not SCAN_SUPPORT: 
-            mbox.showwarning("環境限制", "您的電腦環境缺少 pyzbar 或 opencv 庫，暫無法使用圖片掃描功能。\n請在終端機執行 `pip install pyzbar opencv-python` 以啟用此功能。", parent=self)
-            return
-        p = fd.askopenfilename(parent=self)
-        if p:
-            img = cv2.imdecode(np.fromfile(p, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
-            objs = decode(img)
-            if objs:
-                fid = objs[0].data.decode('utf-8')
-                if self.system.add_friend(self.current_user, fid):
-                    mbox.showinfo("成功", f"掃描成功！已加入好友：{fid}", parent=self)
-                    self.refresh_ui()
-                else: 
-                    mbox.showerror("失敗", "無法加入該好友（可能已是好友）。", parent=self)
-            else:
-                mbox.showerror("辨識失敗", "無法在該圖片中找到有效的 QR Code。", parent=self)
-                self.refresh_ui()
-
-    def quick_charge(self, fid): 
-        """快速向特定好友發起記帳"""
-        self.tabview.set("群組中心")
-        self.open_add_tx(force_participant=fid)
 
 if __name__ == "__main__":
     app = AccountingGUI()

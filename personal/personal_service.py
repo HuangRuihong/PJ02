@@ -6,26 +6,7 @@ from shared.models import TransactionStatus
 class PersonalService(BaseService):
     """個人服務模組：負責好友管理與個人債務統計 (由 Person A 負責)"""
     
-    def add_friend(self, user_id, friend_id):
-        """建立好友關係 (雙向)"""
-        # 防止加自己為好友
-        if str(user_id) == str(friend_id):
-            return False
-            
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("INSERT OR IGNORE INTO friends (user_id, friend_id) VALUES (?, ?)", (user_id, friend_id))
-                cursor.execute("INSERT OR IGNORE INTO friends (user_id, friend_id) VALUES (?, ?)", (friend_id, user_id))
-                return True
-            except Exception: return False
 
-    def get_friends(self, user_id):
-        """獲取好友清單"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT friend_id FROM friends WHERE user_id = ?", (user_id,))
-            return [r[0] for r in cursor.fetchall()]
 
     def generate_qr_path(self, user_id):
         """產生 QR Code 圖片並傳回暫存路徑"""

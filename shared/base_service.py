@@ -57,12 +57,4 @@ class BaseService:
                     PRIMARY KEY (transaction_id, user_id)
                 )
             """)
-            # 5. 好友表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS friends (
-                    user_id TEXT,
-                    friend_id TEXT,
-                    PRIMARY KEY (user_id, friend_id)
-                )
-            """)
             conn.commit()

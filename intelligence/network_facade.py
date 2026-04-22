@@ -115,12 +115,7 @@ class NetworkDebtSystem:
         res = self._get(f"/api/transaction/{tx_id}/notification")
         return res.get("message", "無法獲取通知訊息")
 
-    def get_friends(self, user_id):
-        return self._get(f"/api/user/{user_id}/friends")
 
-    def add_friend(self, user_id, friend_id):
-        res = self._post("/api/user/friend/add", {"user_id": user_id, "friend_id": friend_id})
-        return res.get("success", False)
 
     def reject_transaction(self, user_id, tx_id):
         res = self._post("/api/transaction/reject", {"user_id": user_id, "transaction_id": tx_id})

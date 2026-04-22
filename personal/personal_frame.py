@@ -35,7 +35,7 @@ class PersonalFrame(ctk.CTkFrame):
     def load_real_data(self):
         """直接從後端資料庫取得真實數據"""
         # 1. 財務總覽計算
-        summary = self.system.get_user_summary(self.current_user) # dict {friend: balance}
+        summary = self.system.get_user_summary(self.current_user) # dict {user_id: balance}
         total_assets = sum(summary.values())
         receivables = sum(val for val in summary.values() if val > 0)
         payables = sum(abs(val) for val in summary.values() if val < 0)

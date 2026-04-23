@@ -183,19 +183,46 @@ class GroupService(BaseService):
                 return False
 
     def confirm_transaction(self, user_id, transaction_id, status=None):
-        """參與者確認交易項目 (預設為 CONFIRMED，若為還款可指定為 SETTLED)"""
+        """參與者確認交易項目 (預設為 CONFIRMED)"""
         target_status = status if status else TransactionStatus.CONFIRMED.name
         with self._get_connection() as conn:
             cursor = conn.cursor()
             try:
-                # 1. 更新參與者個別狀態
+                # 1. 取得交易類型與細節
+                cursor.execute("SELECT type, location, payer_id, amount FROM transactions WHERE transaction_id = ?", (transaction_id,))
+                tx_info = cursor.fetchone()
+                if not tx_info: return False
+                tx_type, loc_data, payer_id, amount = tx_info
+
+                # 2. 更新參與者個別狀態
                 cursor.execute("""
                     UPDATE transaction_participants SET status = ?, settled_at = ? 
                     WHERE transaction_id = ? AND user_id = ? AND status != ?
                 """, (target_status, datetime.now() if target_status == TransactionStatus.SETTLED.name else None, 
                       transaction_id, user_id, TransactionStatus.SETTLED.name))
                 
-                # 2. 自動檢查並更新交易主表狀態 (提取出的核心邏輯)
+                # 3. 核心邏輯：如果是還款確認 (REPAY_REQUEST)，則需要執行自動銷帳
+                if tx_type == 'REPAY_REQUEST' and target_status == TransactionStatus.CONFIRMED.name:
+                    # 將還款申請本身與參與者標記為 SETTLED，避免它變成一筆反向債務
+                    now = datetime.now()
+                    cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (TransactionStatus.SETTLED.name, transaction_id))
+                    cursor.execute("UPDATE transaction_participants SET status = ?, settled_at = ? WHERE transaction_id = ?", 
+                                 (TransactionStatus.SETTLED.name, now, transaction_id))
+                    
+                    # 讀取並銷毀原始欠款項目 (雙向銷帳)
+                    if loc_data:
+                        orig_tx_ids = loc_data.split(',')
+                        for old_tid in orig_tx_ids:
+                            # 雙向銷帳：還款人(payer_id) 與 收款人(user_id) 在這些帳單中的欠款都視為已清償
+                            cursor.execute("""
+                                UPDATE transaction_participants SET status = ?, settled_at = ?
+                                WHERE transaction_id = ? AND user_id IN (?, ?)
+                            """, (TransactionStatus.SETTLED.name, now, old_tid, payer_id, user_id))
+                            
+                            # 檢查該交易是否所有人都結清了，若是則更新主表
+                            self._update_main_transaction_status(cursor, old_tid)
+
+                # 4. 自動檢查並更新交易主表狀態
                 self._update_main_transaction_status(cursor, transaction_id)
                 
                 conn.commit()
@@ -451,10 +478,15 @@ class GroupService(BaseService):
             return tx
 
     def repay_transaction(self, group_id, tx_id, debtor_id, creditor_id, amount):
-        """欠款人針對單筆帳單進行還款：建立還款紀錄並標記原帳單為已結算"""
+        """欠款人針對單筆帳單進行還款 (強化防禦版)"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             try:
+                # [安全檢查] 確保原帳單尚未結清
+                cursor.execute("SELECT status FROM transaction_participants WHERE transaction_id=? AND user_id=?", (tx_id, debtor_id))
+                row = cursor.fetchone()
+                if not row or row[0] == TransactionStatus.SETTLED.name: return False
+
                 now = datetime.now()
                 # 1. 建立還款交易主表
                 s_id = f"repay_{uuid.uuid4().hex[:8]}"

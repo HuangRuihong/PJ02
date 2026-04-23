@@ -270,15 +270,9 @@ class GroupFrame(ctk.CTkFrame):
         BudgetDialog(self.winfo_toplevel(), self.budget_val, self.save_budget_cb)
 
     def _get_status_info(self, status):
-        """根據狀態回傳顏色與顯示文字"""
+        """根據狀態回傳顏色與顯示文字 (Person A 同步優化：使用全域統一映射)"""
         from shared.models import TransactionStatus
-        mapping = {
-            TransactionStatus.PENDING.name: ("#e67e22", "待確認"),
-            TransactionStatus.CONFIRMED.name: ("#2ecc71", "已確認"),
-            TransactionStatus.SETTLED.name: ("#7f8c8d", "已結清"),
-            TransactionStatus.REJECTED.name: ("#e74c3c", "有誤"),
-        }
-        return mapping.get(status, ("#34495e", status))
+        return TransactionStatus.get_ui_info(status)
 
     def save_budget_cb(self, amount):
         """儲存預算後的回調"""

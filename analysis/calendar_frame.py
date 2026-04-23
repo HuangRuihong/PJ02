@@ -95,8 +95,9 @@ class CalendarFrame(ctk.CTkFrame):
                 al = ctk.CTkLabel(af, text=amt_text, text_color=amt_color, font=ctk.CTkFont(size=15, weight="bold"))
                 al.pack(anchor="e")
                 
-                status_map = {"CONFIRMED": "已確認", "PENDING": "待確認", "SETTLED": "已結清", "REJECTED": "已拒絕"}
-                status_text = status_map.get(tx['status'], tx['status'])
+                # 使用全域統一的狀態顯示邏輯
+                from shared.models import TransactionStatus
+                _, status_text = TransactionStatus.get_ui_info(tx['status'])
                 sl = ctk.CTkLabel(af, text=status_text, font=ctk.CTkFont(size=11), text_color="gray")
                 sl.pack(anchor="e")
 

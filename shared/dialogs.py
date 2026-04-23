@@ -346,23 +346,6 @@ class AddTransactionDialog(ctk.CTkToplevel):
             from tkinter import messagebox
             messagebox.showerror("格式錯誤", "請檢查金額輸入是否正確！")
 
-class QRDialog(ctk.CTkToplevel):
-    """我的 QR 名片對話框"""
-    def __init__(self, parent, qr_path, uid):
-        super().__init__(parent)
-        self.title("我的 QR Code 名片")
-        self.geometry("400x550")
-        self.attributes("-topmost", True)
-        self.grab_set()
-        self.after(10, self.lift)
-        self.focus_force()
-        ctk.CTkLabel(self, text=f"掃描以加入 {uid}", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
-        img = Image.open(qr_path)
-        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(300, 300))
-        lbl = ctk.CTkLabel(self, image=ctk_img, text=""); lbl.pack(pady=10)
-        ctk.CTkLabel(self, text=f"ID: {uid}", font=ctk.CTkFont(family="Consolas", size=16)).pack(pady=10)
-        ctk.CTkButton(self, text="關閉", command=self.destroy).pack(pady=20)
-
 class TransactionDetailDialog(ctk.CTkToplevel):
     """帳單明細對話框：顯示一筆交易的完整分帳細節與參與者狀態"""
     def __init__(self, parent, tx_details, system=None, current_user=None, refresh_cb=None):
@@ -424,9 +407,10 @@ class TransactionDetailDialog(ctk.CTkToplevel):
             ctk.CTkLabel(pf, text=f"{status_text} {p['user_id']}").pack(side="left", padx=10)
             ctk.CTkLabel(pf, text=f"${p['amount']}").pack(side="right", padx=10)
             
-            # 如果是當前使用者 且 尚未結清 且 不是付款人 → 顯示「還款」按鈕
+            # 如果是當前使用者 且 尚未確認/被退回 且 不是付款人 → 顯示「還款」按鈕
+            # 優化說明：已確認項目應透過個人中心的「還款申請」進行批量處理，避免單筆重複觸發
             is_debtor = (p['user_id'] == self.current_user and 
-                         p['status'] != 'SETTLED' and 
+                         p['status'] in ['PENDING', 'REJECTED'] and 
                          p['user_id'] != self.details['payer'] and
                          p['amount'] > 0)
             if is_debtor and self.system:

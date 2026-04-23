@@ -150,18 +150,3 @@ class NetworkDebtSystem:
             res = requests.delete(f"{self.base_url}/api/transaction/{tx_id}", timeout=5)
             return res.json().get("success", False)
         except: return False
-
-    def generate_qr_path(self, user_id):
-        import qrcode
-        # 檔案位於 app/intelligence/，資料庫與圖片位於 app/shared/data/
-        shared_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shared")
-        data_dir = os.path.join(shared_dir, "data")
-        os.makedirs(data_dir, exist_ok=True)
-        
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
-        qr.add_data(user_id)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        path = os.path.join(data_dir, f"qr_{user_id}.png")
-        img.save(path)
-        return os.path.abspath(path)

@@ -32,293 +32,120 @@ class PersonalFrame(ctk.CTkFrame):
         self.history_frame = ctk.CTkFrame(self.main_scroll, fg_color="transparent")
         self.history_frame.pack(fill="x", padx=10, pady=10)
 
-    def load_real_data(self):
-        """直接從後端資料庫取得真實數據"""
-        # 1. 財務總覽計算
-        summary = self.system.get_user_summary(self.current_user) # dict {user_id: balance}
-        total_assets = sum(summary.values())
-        receivables = sum(val for val in summary.values() if val > 0)
-        payables = sum(abs(val) for val in summary.values() if val < 0)
-        
-        self.dashboard_data = {
-            "total_assets": total_assets,
-            "receivables": receivables,
-            "payables": payables
-        }
-        
-        # 2. 待辦事項 (從應付帳款 payables 中篩出 PENDING 的項目)
-        debts, _ = self.system.get_personal_debts(self.current_user)
-        self.pending_inbox = []
-        for d in debts:
-            if d['status'] == 'PENDING':
-                # 統一處理日期格式為 YYYY/MM/DD
-                raw_date = str(d['date'])
-                try:
-                    dt = datetime.fromisoformat(raw_date) if " " in raw_date or "T" in raw_date else datetime.strptime(raw_date[:10], '%Y-%m-%d')
-                    date_str = dt.strftime('%Y/%m/%d')
-                except:
-                    date_str = raw_date[:10].replace('-', '/')
-
-                self.pending_inbox.append({
-                    "id": d['tx_id'], 
-                    "payer": d['creditor'], 
-                    "desc": d['desc'] or "一般支出",
-                    "amount": d['amount'], 
-                    "time": date_str,  # 配合 build_inbox 使用 time 欄位
-                    "status": "PENDING",
-                    "type": d.get('type'), 
-                    "loc": d.get('loc')
-                })
-                
-        # 3. 個人歷史流水紀錄
+    def _format_date(self, raw, fmt='%Y/%m/%d'):
+        """統一的日期解析與格式化 (一行化優化)"""
+        if not raw: return "----/--/--"
         try:
-            history = self.system.get_personal_history(self.current_user)
-            self.history_data = []
-            for tx in history:
-                is_payer = tx.get('payer_id') == self.current_user
-                self.history_data.append({
-                    "id": tx['id'], "desc": tx['description'] or "無描述", 
-                    "amount": tx['amount'], "date": str(tx['timestamp'])[:10], 
-                    "type": "我付錢" if is_payer else "別人付錢"
-                })
-        except Exception as e:
-            print("History Load Error:", e)
-            self.history_data = []
+            dt = raw if isinstance(raw, datetime) else (datetime.fromisoformat(str(raw)) if " " in str(raw) or "T" in str(raw) else datetime.strptime(str(raw)[:10], '%Y-%m-%d'))
+            return dt.strftime(fmt)
+        except: return str(raw)[:10].replace('-', '/')
+
+    def load_real_data(self):
+        """同步載入後端數據並格式化 (Person A 壓縮版)"""
+        payables, receivables = self.system.get_personal_debts(self.current_user)
+        self.pending_inbox = [{
+            "id": d['tx_id'], "payer": d['creditor'],
+            "amount": d['amount'], "desc": d['desc'] or "無描述",
+            "time": self._format_date(d['date']), "status": "PENDING", "type": d.get('type'), "loc": d.get('loc')
+        } for d in payables if d['status'] == 'PENDING']
+        
+        self.history_data = self.system.get_personal_history(self.current_user)
+        summary = self.system.get_user_summary(self.current_user)
+        total_assets = sum(summary.values())
+        self.dashboard_data = {"total_assets": total_assets, "receivables": sum(v for v in summary.values() if v > 0), "payables": sum(v for v in summary.values() if v < 0)}
 
     def do_confirm(self, tx_id, tx_type=None, loc_str=None, payer_id=None):
-        """處理真實確認交易連動 / 審核結清申請"""
+        """處理確認交易連動 / 審核結清申請 (壓縮版)"""
         from tkinter import messagebox
-        
+        res = False
         if tx_type == "REPAY_REQUEST":
-            tx_ids = loc_str.split(",") if loc_str else []
-            if self.system.settle_specific_debts(payer_id, self.current_user, tx_ids):
-                # 確認還款請求時，將該請求本身也標記為 SETTLED，以免它變成一筆「新債務」造成金額翻轉
+            if self.system.settle_specific_debts(payer_id, self.current_user, loc_str.split(",") if loc_str else []):
                 self.system.confirm_transaction(self.current_user, tx_id, status="SETTLED")
-                messagebox.showinfo("成功", "[已確認] 已收到款項，相關債務已正式銷帳！", parent=self.winfo_toplevel())
-                self.winfo_toplevel().refresh_ui()
-            else:
-                messagebox.showerror("錯誤", "結清處理失敗！", parent=self.winfo_toplevel())
-        else:
-            if self.system.confirm_transaction(self.current_user, tx_id):
-                messagebox.showinfo("成功", "[已確認] 已確認此筆帳款，正式納入結算！", parent=self.winfo_toplevel())
-                self.winfo_toplevel().refresh_ui()
+                res = True
+        else: res = self.system.confirm_transaction(self.current_user, tx_id)
+        
+        if res: messagebox.showinfo("成功", "操作已成功執行！", parent=self.winfo_toplevel()); self.winfo_toplevel().refresh_ui()
+        else: messagebox.showerror("錯誤", "處理失敗！", parent=self.winfo_toplevel())
 
     def do_reject(self, tx_id, tx_type=None):
-        """處理拒絕交易邏輯"""
-        from tkinter import messagebox
-        if hasattr(self.system, "reject_transaction") and self.system.reject_transaction(self.current_user, tx_id):
-            action_name = "還款回報" if tx_type == "REPAY_REQUEST" else "帳款"
-            messagebox.showinfo("拒絕", f"❌ 已退回這筆{action_name}。", parent=self.winfo_toplevel())
+        """處理拒絕交易"""
+        if self.system.reject_transaction(self.current_user, tx_id):
             self.winfo_toplevel().refresh_ui()
-        else:
-            messagebox.showinfo("拒絕", "[X] 已拒絕此筆帳款。(目前後端尚未實作退件機制，僅為前端展示)", parent=self.winfo_toplevel())
-
-    def refresh(self):
-        """刷新畫面，每次點擊到這個「我的帳單」分頁時都會呼叫"""
-        # 1. 先抓取最新資料
-        self.load_real_data()
-        
-        # 2. 清除舊元件後重新繪製各區塊
-        for w in self.dashboard_frame.winfo_children(): w.destroy()
-        for w in self.inbox_frame.winfo_children(): w.destroy()
-        for w in self.history_frame.winfo_children(): w.destroy()
-        
-        self.build_dashboard()
-        self.build_inbox()
-        self.build_history()
 
     def build_dashboard(self):
-        """畫出第一區塊：視覺化財務儀表板"""
-        ctk.CTkLabel(self.dashboard_frame, text="財務總覽", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(0, 10))
-        
-        # 使用 load_real_data 已經算好且包含「所有群組+私帳」的真實總額
-        total_receivable = self.dashboard_data.get("receivables", 0)
-        total_payable = self.dashboard_data.get("payables", 0)
-        total_assets = self.dashboard_data.get("total_assets", 0)
-
-        # 建立一個橫向排列的容器放三個卡片
+        """畫出第一區塊：數據卡片儀表板"""
+        d = self.dashboard_data
         cards_container = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        cards_container.pack(fill="x", pady=5)
-        cards_container.grid_columnconfigure((0, 1, 2), weight=1)
+        cards_container.pack(fill="x", padx=10, pady=10)
+        cards_container.grid_columnconfigure((0,1,2), weight=1)
         
-        # --- 卡片1：應收 (別人欠我錢) ---
-        card1 = ctk.CTkFrame(cards_container, fg_color="#2c3e50")
-        card1.grid(row=0, column=0, padx=5, sticky="ew")
-        ctk.CTkLabel(card1, text="別人欠我 (已確認)", text_color="gray80").pack(pady=(10, 0))
-        ctk.CTkLabel(card1, text=f"+ ${total_receivable:,}", 
-                     font=ctk.CTkFont(size=24, weight="bold"), text_color="#2ecc71").pack(pady=(5, 15))
-                     
-        # --- 卡片2：應付 (我欠別人錢) ---
-        card2 = ctk.CTkFrame(cards_container, fg_color="#2c3e50")
-        card2.grid(row=0, column=1, padx=5, sticky="ew")
-        ctk.CTkLabel(card2, text="我欠別人 (已確認)", text_color="gray80").pack(pady=(10, 0))
-        ctk.CTkLabel(card2, text=f"- ${total_payable:,}", 
-                     font=ctk.CTkFont(size=24, weight="bold"), text_color="#e74c3c").pack(pady=(5, 15))
-
-        # --- 卡片3：待收支淨額 ---
-        card3 = ctk.CTkFrame(cards_container, fg_color="#1f538d")
-        card3.grid(row=0, column=2, padx=5, sticky="ew")
-        ctk.CTkLabel(card3, text="待收支淨額 (已確認)", text_color="gray90").pack(pady=(10, 0))
-        ctk.CTkLabel(card3, text=f" ${total_assets:+,}", 
-                     font=ctk.CTkFont(size=24, weight="bold"), text_color="white").pack(pady=(5, 15))
+        for i, (title, val, color) in enumerate([("總資產 (淨額)", d['total_assets'], "#1f538d"), ("累計應收", d['receivables'], "#2ecc71"), ("累計應付", d['payables'], "#e74c3c")]):
+            card = ctk.CTkFrame(cards_container, fg_color=color)
+            card.grid(row=0, column=i, padx=5, sticky="ew")
+            ctk.CTkLabel(card, text=title, text_color="gray90").pack(pady=(10, 0))
+            ctk.CTkLabel(card, text=f" ${val:+,}", font=ctk.CTkFont(size=24, weight="bold"), text_color="white").pack(pady=(5, 15))
 
     def build_inbox(self):
-        """畫出第二區塊：待確認的通知匣 (Pending Inbox)"""
+        """畫出第二區塊：待確認通知匣"""
         ctk.CTkLabel(self.inbox_frame, text="待辦事項 (需要你驗證的帳款)", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
-        
-        # 優化：直接使用 load_real_data 預先抓取的資料，避免重複向資料庫發起低效查詢
-        pending_items = self.pending_inbox
-
-        if not pending_items:
-            ctk.CTkLabel(self.inbox_frame, text="目前沒有需要驗證的帳款喔！", text_color="gray").pack(pady=10)
-            return
+        if not self.pending_inbox:
+            ctk.CTkLabel(self.inbox_frame, text="目前沒有需要驗證的帳款喔！", text_color="gray").pack(pady=10); return
             
-        for item in pending_items:
-            item_card = ctk.CTkFrame(self.inbox_frame, border_width=1, border_color="#e67e22")
-            item_card.pack(fill="x", pady=5)
+        for item in self.pending_inbox:
+            card = ctk.CTkFrame(self.inbox_frame, border_width=1, border_color="#e67e22")
+            card.pack(fill="x", pady=5)
+            info = ctk.CTkFrame(card, fg_color="transparent"); info.pack(side="left", fill="both", expand=True, padx=15, pady=10)
+            ctk.CTkLabel(info, text=f"發起人: {item['payer']} | {item['time']}", font=ctk.CTkFont(size=11), text_color="gray70").pack(anchor="w")
+            ctk.CTkLabel(info, text=f"{item['desc']} ({'還款' if item['type'] in ['REPAY_REQUEST', 'SETTLEMENT'] else '請款'}: ${item['amount']})", font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w")
             
-            left_info = ctk.CTkFrame(item_card, fg_color="transparent")
-            left_info.pack(side="left", fill="both", expand=True, padx=15, pady=10)
+            btns = ctk.CTkFrame(card, fg_color="transparent"); btns.pack(side="right", padx=15)
+            ctk.CTkButton(btns, text="確認", width=60, fg_color="#27ae60", command=lambda x=item: self.do_confirm(x['id'], x['type'], x['loc'], x['payer'])).pack(side="left", padx=5)
+            ctk.CTkButton(btns, text="有誤", width=60, fg_color="#c0392b", command=lambda x=item: self.do_reject(x['id'], x['type'])).pack(side="left", padx=5)
             
-            ctk.CTkLabel(left_info, text=f"發起人: {item['payer']}  |  日期: {item['time']}", 
-                         font=ctk.CTkFont(size=12), text_color="gray70").pack(anchor="w")
-            if item.get("type") == "REPAY_REQUEST":
-                title_text = f"{item['desc']} (回報還款: ${item['amount']})"
-            else:
-                title_text = f"{item['desc']} (向你請款: ${item['amount']})"
-                
-            ctk.CTkLabel(left_info, text=title_text, 
-                         font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", pady=(5, 0))
-            
-            right_btns = ctk.CTkFrame(item_card, fg_color="transparent")
-            right_btns.pack(side="right", padx=15, pady=10)
-            
-            # 綁定真實的確認與拒絕動作
-            btn_ok = ctk.CTkButton(right_btns, text="確認", width=60, fg_color="#27ae60", hover_color="#2ecc71",
-                                   command=lambda tx=item['id'], t=item.get("type"), loc=item.get("loc"), p=item["payer"]: self.do_confirm(tx, t, loc, p))
-            btn_ok.pack(side="left", padx=5)
-            
-            btn_no = ctk.CTkButton(right_btns, text="有誤", width=60, fg_color="#c0392b", hover_color="#e74c3c",
-                                   command=lambda tx=item['id'], t=item.get("type"): self.do_reject(tx, t))
-            btn_no.pack(side="left", padx=5)
+            # 懸停效果
+            card.bind("<Enter>", lambda e, c=card: c.configure(fg_color="#2c2c2c"))
+            card.bind("<Leave>", lambda e, c=card: c.configure(fg_color="transparent"))
+            for w in [info]+list(info.winfo_children()): 
+                w.bind("<Button-1>", lambda e, tid=item['id']: self.show_detail(tid)); w.configure(cursor="hand2")
 
     def build_history(self):
         """畫出第三區塊：歷史紀錄清單"""
         ctk.CTkLabel(self.history_frame, text="最近的帳務紀錄", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
-        
-        # 獲取真實歷史紀錄 (包含個人私帳)
-        history = self.system.get_personal_history(self.current_user)
-        if not history:
-            ctk.CTkLabel(self.history_frame, text="尚無任何歷史紀錄。", text_color="gray").pack(pady=10)
-            return
-
-        # 確保排序：最新在最上方 (降序)
-        history.sort(key=lambda x: str(x['timestamp']), reverse=True)
+        if not self.history_data:
+            ctk.CTkLabel(self.history_frame, text="尚無任何歷史紀錄。", text_color="gray").pack(pady=10); return
 
         last_date = None
-        for item in history[:20]: # 僅顯示前 20 筆
-            # 解析日期格式為 M月D日
-            raw_ts = item['timestamp']
-            try:
-                if isinstance(raw_ts, str):
-                    dt = datetime.fromisoformat(raw_ts) if " " in raw_ts or "T" in raw_ts else datetime.strptime(raw_ts[:10], '%Y-%m-%d')
-                else:
-                    dt = raw_ts
-                curr_date = dt.strftime('%m月%d日')
-            except:
-                curr_date = str(raw_ts)[:10].replace('-', '/')
-
+        for item in self.history_data[:20]:
+            curr_date = self._format_date(item['timestamp'], '%m月%d日')
             if curr_date != last_date:
-                sep_f = ctk.CTkFrame(self.history_frame, fg_color="transparent")
-                sep_f.pack(fill="x", pady=(15, 5))
-                ctk.CTkLabel(sep_f, text=f"{curr_date} ---------------------------------", 
-                             font=ctk.CTkFont(size=12, weight="bold"), text_color="gray70").pack(side="left", padx=10)
+                sep = ctk.CTkFrame(self.history_frame, fg_color="transparent"); sep.pack(fill="x", pady=(10, 2))
+                ctk.CTkLabel(sep, text=f"{curr_date} ------------------", font=ctk.CTkFont(size=11, weight="bold"), text_color="gray70").pack(side="left", padx=10)
                 last_date = curr_date
 
-            hf = ctk.CTkFrame(self.history_frame, fg_color="transparent", height=40)
-            hf.pack(fill="x", pady=2)
-            hf.grid_propagate(False) # 固定高度
+            hf = ctk.CTkFrame(self.history_frame, fg_color="transparent", height=40); hf.pack(fill="x", pady=1); hf.grid_propagate(False)
+            hf.grid_rowconfigure(0, weight=1); hf.grid_columnconfigure((0,1), minsize=100); hf.grid_columnconfigure(2, weight=1)
             
-            # 設定網格權重與寬度，確保跨行對其
-            hf.grid_columnconfigure(0, minsize=100) # 日期
-            hf.grid_columnconfigure(1, minsize=130) # 群組標籤
-            hf.grid_columnconfigure(2, weight=1)     # 描述 (伸縮)
-            hf.grid_columnconfigure(3, minsize=90)  # 狀態標籤
-            hf.grid_columnconfigure(4, minsize=250) # 金額資訊
+            from shared.models import TransactionStatus
+            st_color, st_text = TransactionStatus.get_ui_info(item['status'])
+            ctk.CTkLabel(hf, text=st_text, fg_color=st_color, text_color="white", corner_radius=4, width=60, font=ctk.CTkFont(size=10)).grid(row=0, column=0, padx=5)
+            ctk.CTkLabel(hf, text=f"[{item['group_name']}]", text_color="gray", font=ctk.CTkFont(size=11)).grid(row=0, column=1, padx=5, sticky="w")
+            ctk.CTkLabel(hf, text=item['description'], anchor="w").grid(row=0, column=2, padx=5, sticky="ew")
             
-            # 使用跟隊友一致的 YYYY/MM/DD 格式
-            if isinstance(item['timestamp'], str):
-                try:
-                    dt = datetime.strptime(item['timestamp'][:10], '%Y-%m-%d')
-                    date_str = dt.strftime('%Y/%m/%d')
-                except:
-                    date_str = item['timestamp'][:10].replace('-', '/')
-            else:
-                date_str = item['timestamp'].strftime('%Y/%m/%d')
+            amt_color = "#2ecc71" if item['payer_id'] == self.current_user else "#e74c3c"
+            ctk.CTkLabel(hf, text=f"${item['amount']:,}", text_color=amt_color, font=ctk.CTkFont(weight="bold")).grid(row=0, column=3, padx=15, sticky="e")
 
-            # 1. 日期欄
-            ctk.CTkLabel(hf, text=date_str, font=ctk.CTkFont(size=12), anchor="w").grid(row=0, column=0, padx=(15, 5), sticky="w")
-            
-            # 2. 群組標籤
-            g_name = item.get('group_name', '未知群組')
-            is_personal = "個人私帳" in g_name
-            bg_color = "#34495e" if not is_personal else "#2c3e50"
-            group_tag = ctk.CTkLabel(hf, text=g_name, font=ctk.CTkFont(size=11), width=110,
-                                    fg_color=bg_color, corner_radius=6)
-            group_tag.grid(row=0, column=1, padx=5, sticky="w")
-            
-            # 3. 描述欄 (自動延伸)
-            desc_text = item['description'] or '一般支出'
-            ctk.CTkLabel(hf, text=f"{desc_text}", font=ctk.CTkFont(size=13), anchor="w").grid(row=0, column=2, padx=10, sticky="ew")
-            
-            # --- 3.5 狀態標籤 ---
-            st_color, st_text = self._get_status_info(item.get('status', 'PENDING'))
-            status_tag = ctk.CTkLabel(hf, text=st_text, font=ctk.CTkFont(size=10, weight="bold"),
-                                    fg_color=st_color, text_color="white", corner_radius=4, width=60)
-            status_tag.grid(row=0, column=3, padx=10, sticky="w")
-            
-            # 4. 金額欄 (靠最右側對齊)
-            is_payer = (item['payer_id'] == self.current_user)
-            total_amt = item['amount']
-            my_share = item.get('my_share', 0)
-            
-            amt_info = ctk.CTkFrame(hf, fg_color="transparent")
-            amt_info.grid(row=0, column=4, padx=(5, 15), sticky="e")
-            
-            if is_payer:
-                others_owe = total_amt - my_share
-                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt:,} (應收回 ${others_owe:,})", 
-                             text_color="#2ecc71", font=ctk.CTkFont(size=13, weight="bold"), anchor="e").pack(side="right")
-            else:
-                ctk.CTkLabel(amt_info, text=f"總額 ${total_amt:,} (應付 ${my_share:,})", 
-                             text_color="#e74c3c", font=ctk.CTkFont(size=13, weight="bold"), anchor="e").pack(side="right")
-
-            # ── 整合隊友的：點擊查看明細功能 ──
-            click_btn = ctk.CTkButton(hf, text="", fg_color="transparent", hover_color="#2c2c2c", 
-                                     command=lambda tid=item['id']: self.show_detail(tid))
-            click_btn.place(relx=0, rely=0, relwidth=1, relheight=1)
-            # 提升 Label 層級使其顯示在按鈕上
-            for child in hf.winfo_children():
-                if child != click_btn: child.lift()
-
-    def _get_status_info(self, status):
-        """與 GroupFrame 保持一致的狀態資訊"""
-        from shared.models import TransactionStatus
-        mapping = {
-            TransactionStatus.PENDING.name: ("#e67e22", "待確認"),
-            TransactionStatus.CONFIRMED.name: ("#2ecc71", "已確認"),
-            TransactionStatus.SETTLED.name: ("#7f8c8d", "已結清"),
-            TransactionStatus.REJECTED.name: ("#e74c3c", "有誤"),
-        }
-        return mapping.get(status, ("#34495e", status))
+            for w in [hf]+list(hf.winfo_children()):
+                w.bind("<Button-1>", lambda e, tid=item['id']: self.show_detail(tid))
+                w.bind("<Enter>", lambda e, h=hf: h.configure(fg_color="#2c3e50"))
+                w.bind("<Leave>", lambda e, h=hf: h.configure(fg_color="transparent"))
+                w.configure(cursor="hand2")
 
     def show_detail(self, tid):
-        """顯示交易詳情彈窗 (由隊友實作)"""
-        details = self.system.get_transaction_details(tid)
-        if details:
-            TransactionDetailDialog(
-                self.winfo_toplevel(), details,
-                system=self.system,
-                current_user=self.current_user,
-                refresh_cb=self.winfo_toplevel().refresh_ui
-            )
+        from shared.dialogs import TransactionDetailDialog
+        d = self.system.get_transaction_details(tid)
+        if d: TransactionDetailDialog(self.winfo_toplevel(), d, system=self.system, current_user=self.current_user, refresh_cb=self.winfo_toplevel().refresh_ui)
+
+    def refresh(self):
+        for w in [self.dashboard_frame, self.inbox_frame, self.history_frame]:
+            for child in w.winfo_children(): child.destroy()
+        self.load_real_data(); self.build_dashboard(); self.build_inbox(); self.build_history()

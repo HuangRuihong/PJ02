@@ -15,8 +15,9 @@ import tkinter.messagebox as mbox
 from intelligence.debt_system import DebtSystem
 from shared.models import TransactionStatus, TransactionType
 from auth.auth_ui import LoginFrame
-from shared.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog, QRDialog
+from shared.dialogs import JoinGroupDialog, CreateGroupDialog, AddTransactionDialog
 from personal.personal_frame import PersonalFrame
+from personal.friends_frame import FriendsFrame
 from groups.group_frame import GroupFrame
 from analysis.analysis_frame import AnalysisFrame
 from analysis.calendar_frame import CalendarFrame
@@ -163,6 +164,12 @@ class AccountingGUI(ctk.CTk):
         
         ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
         
+        # 恢復到原始位置：夾在中間
+        self.tab_f = FriendsFrame(scroll_p, self.system, self.current_user)
+        self.tab_f.pack(fill="x", pady=30)
+        
+        ctk.CTkFrame(scroll_p, height=2, fg_color="#34495e").pack(fill="x", padx=40, pady=10)
+        
         self.tab_c = CalendarFrame(scroll_p, self.system, self.current_user)
         self.tab_c.pack(fill="x", pady=30)
         
@@ -216,6 +223,9 @@ class AccountingGUI(ctk.CTk):
         
         try: self.tab_c.refresh(self.current_group_id)
         except Exception as e: print(f"Refresh Calendar Error: {e}")
+        
+        try: self.tab_f.refresh()
+        except Exception as e: print(f"Refresh Friends Error: {e}")
 
     def on_focus_refresh(self, event=None):
         """當視窗重新獲得焦點時觸發的高效刷新"""
@@ -351,9 +361,10 @@ class AccountingGUI(ctk.CTk):
                 self.refresh_ui()
                 mbox.showinfo("結算成功", f"此群組已依照「{mode}」模式完成結算！", parent=self)
 
-    def show_my_qr(self): 
-        """顯示個人 QR Code 名片"""
-        QRDialog(self, self.system.generate_qr_path(self.current_user), self.current_user)
+    def quick_charge(self, fid): 
+        """快速向特定好友發起記帳"""
+        self.tabview.set("群組中心")
+        self.open_add_tx(force_participant=fid)
 
 if __name__ == "__main__":
     app = AccountingGUI()

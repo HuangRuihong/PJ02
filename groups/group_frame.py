@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from datetime import datetime
 from shared.dialogs import TransactionDetailDialog, BudgetDialog
+from shared.models import Category
 
 
 
@@ -136,10 +137,21 @@ class GroupFrame(ctk.CTkFrame):
                                     fg_color=st_color, text_color="white", corner_radius=4, width=60)
             status_tag.pack(side="left", padx=(10, 5), pady=5)
 
-            # --- 中間：交易描述 ---
+            # --- 中間：分類圖示 (加強版) ---
+            cat_name = tx.get('category', 'OTHER')
+            try:
+                cat_obj = Category[cat_name] if cat_name in Category.__members__ else Category.OTHER
+            except:
+                cat_obj = Category.OTHER
+                
+            cat_tag = ctk.CTkLabel(f, text=cat_obj.icon, font=ctk.CTkFont(size=18), 
+                                   text_color=cat_obj.color, width=40)
+            cat_tag.pack(side="left", padx=(10, 5))
+
+            # --- 描述內容 ---
             prefix = "償還了" if tx['type'] == 'SETTLEMENT' else "支出"
             l = ctk.CTkLabel(f, text=f"{tx['payer']} {prefix} ${tx['amount']:,} - {tx['description'] or ''}")
-            l.pack(side="left", padx=10)
+            l.pack(side="left", padx=5)
             
             # 綁定雙擊事件
             f.bind("<Double-1>", lambda e, tid=tx['id']: self.show_details(tid))
@@ -240,15 +252,21 @@ class GroupFrame(ctk.CTkFrame):
         confirm = messagebox.askyesno("確認結算", f"確定要執行「{ '一般' if mode=='ORIGINAL' else '智慧' }結算」嗎？\n這將會產生還款單並將目前的消費標記為已結清。", parent=self.winfo_toplevel())
         if not confirm: return
         
-        plan = self.system.settle_debts(self.gid, self.current_user, mode=mode)
-        if not plan:
+        res = self.system.settle_debts(self.gid, self.current_user, mode=mode)
+        if not res or not res.get('plan'):
             messagebox.showinfo("結算結果", "目前沒有已確認且未結算的交易項目。", parent=self.winfo_toplevel())
             return
             
         # 顯示結算計畫結果
+        plan = res['plan']
+        items = res.get('items', [])
+        items_str = "\n".join([f"  · {it}" for it in items])
         result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']:,}元" for p in plan])
+        
         messagebox.showinfo("結算計畫已生成", 
-            f"已使用「{mode}」模式完成計算，建議還款方式如下：\n\n{result_str}\n\n"
+            f"已使用「{mode}」模式完成計算。\n\n"
+            f"[本次結清項目]:\n{items_str}\n\n"
+            f"[建議還款方式]:\n{result_str}\n\n"
             "上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。", parent=self.winfo_toplevel())
         self.winfo_toplevel().refresh_ui()
 

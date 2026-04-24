@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from datetime import datetime
 from shared.dialogs import TransactionDetailDialog
+from shared.models import Category
 
 class PersonalFrame(ctk.CTkFrame):
     def __init__(self, parent, system, current_user):
@@ -46,7 +47,8 @@ class PersonalFrame(ctk.CTkFrame):
         self.pending_inbox = [{
             "id": d['tx_id'], "payer": d['creditor'],
             "amount": d['amount'], "desc": d['desc'] or "無描述",
-            "time": self._format_date(d['date']), "status": "PENDING", "type": d.get('type'), "loc": d.get('loc')
+            "time": self._format_date(d['date']), "status": "PENDING", 
+            "type": d.get('type'), "loc": d.get('loc'), "category": d.get('category', 'OTHER')
         } for d in payables if d['status'] == 'PENDING']
         
         self.history_data = self.system.get_personal_history(self.current_user)
@@ -95,8 +97,16 @@ class PersonalFrame(ctk.CTkFrame):
             card = ctk.CTkFrame(self.inbox_frame, border_width=1, border_color="#e67e22")
             card.pack(fill="x", pady=5)
             info = ctk.CTkFrame(card, fg_color="transparent"); info.pack(side="left", fill="both", expand=True, padx=15, pady=10)
-            ctk.CTkLabel(info, text=f"發起人: {item['payer']} | {item['time']}", font=ctk.CTkFont(size=11), text_color="gray70").pack(anchor="w")
-            ctk.CTkLabel(info, text=f"{item['desc']} ({'還款' if item['type'] in ['REPAY_REQUEST', 'SETTLEMENT'] else '請款'}: ${item['amount']})", font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w")
+            
+            # 分類圖示
+            cat_name = item.get('category', 'OTHER')
+            cat_obj = Category[cat_name] if cat_name in Category.__members__ else Category.OTHER
+            ctk.CTkLabel(info, text=cat_obj.icon, font=ctk.CTkFont(size=20), text_color=cat_obj.color).pack(side="left", padx=(0, 10))
+            
+            text_box = ctk.CTkFrame(info, fg_color="transparent")
+            text_box.pack(side="left", fill="both", expand=True)
+            ctk.CTkLabel(text_box, text=f"發起人: {item['payer']} | {item['time']}", font=ctk.CTkFont(size=11), text_color="gray70").pack(anchor="w")
+            ctk.CTkLabel(text_box, text=f"{item['desc']} ({'還款' if item['type'] in ['REPAY_REQUEST', 'SETTLEMENT'] else '請款'}: ${item['amount']})", font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w")
             
             btns = ctk.CTkFrame(card, fg_color="transparent"); btns.pack(side="right", padx=15)
             ctk.CTkButton(btns, text="確認", width=60, fg_color="#27ae60", command=lambda x=item: self.do_confirm(x['id'], x['type'], x['loc'], x['payer'])).pack(side="left", padx=5)
@@ -128,11 +138,17 @@ class PersonalFrame(ctk.CTkFrame):
             from shared.models import TransactionStatus
             st_color, st_text = TransactionStatus.get_ui_info(item['status'])
             ctk.CTkLabel(hf, text=st_text, fg_color=st_color, text_color="white", corner_radius=4, width=60, font=ctk.CTkFont(size=10)).grid(row=0, column=0, padx=5)
-            ctk.CTkLabel(hf, text=f"[{item['group_name']}]", text_color="gray", font=ctk.CTkFont(size=11)).grid(row=0, column=1, padx=5, sticky="w")
-            ctk.CTkLabel(hf, text=item['description'], anchor="w").grid(row=0, column=2, padx=5, sticky="ew")
+            
+            # 分類圖示 (New)
+            cat_name = item.get('category', 'OTHER')
+            cat_obj = Category[cat_name] if cat_name in Category.__members__ else Category.OTHER
+            ctk.CTkLabel(hf, text=cat_obj.icon, text_color=cat_obj.color, width=30).grid(row=0, column=1, padx=2)
+
+            ctk.CTkLabel(hf, text=f"[{item['group_name']}]", text_color="gray", font=ctk.CTkFont(size=11)).grid(row=0, column=2, padx=5, sticky="w")
+            ctk.CTkLabel(hf, text=item['description'], anchor="w").grid(row=0, column=3, padx=5, sticky="ew")
             
             amt_color = "#2ecc71" if item['payer_id'] == self.current_user else "#e74c3c"
-            ctk.CTkLabel(hf, text=f"${item['amount']:,}", text_color=amt_color, font=ctk.CTkFont(weight="bold")).grid(row=0, column=3, padx=15, sticky="e")
+            ctk.CTkLabel(hf, text=f"${item['amount']:,}", text_color=amt_color, font=ctk.CTkFont(weight="bold")).grid(row=0, column=4, padx=15, sticky="e")
 
             for w in [hf]+list(hf.winfo_children()):
                 w.bind("<Button-1>", lambda e, tid=item['id']: self.show_detail(tid))

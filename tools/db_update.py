@@ -38,6 +38,9 @@ def update_schema():
         if "location" not in cols:
             print("正在更新 transactions 表：加入 location 欄位...")
             cursor.execute("ALTER TABLE transactions ADD COLUMN location TEXT")
+        if "category" not in cols:
+            print("正在更新 transactions 表：加入 category 欄位...")
+            cursor.execute("ALTER TABLE transactions ADD COLUMN category TEXT DEFAULT 'OTHER'")
             
         conn.commit()
         print("[OK] 資料庫結構校驗完成。")

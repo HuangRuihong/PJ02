@@ -275,7 +275,7 @@ class AccountingGUI(ctk.CTk):
         mems = self.system.get_group_members(self.current_group_id)
         AddTransactionDialog(self, mems, self.add_tx_cb, pre_selected=force_participant)
 
-    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None):
+    def add_tx_cb(self, amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None, category="OTHER"):
         """交易對話框提交後的回調"""
         # 使用 UUID 替代純時間戳，避免高頻操作衝突
         tid = f"tx_{uuid.uuid4().hex[:12]}"
@@ -296,7 +296,7 @@ class AccountingGUI(ctk.CTk):
         else:
              actual_date = datetime.now()
 
-        if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc, timestamp=actual_date): 
+        if self.system.propose_transaction(tid, actual_payer, amt, sel, target_gid, custom, tx_type=tx_type, description=desc, location=loc, timestamp=actual_date, category=category): 
             self.refresh_ui()
 
     def open_edit_tx(self, tid):
@@ -305,7 +305,7 @@ class AccountingGUI(ctk.CTk):
         if not details: return
         members = self.system.get_group_members(details['group_id']) if details['group_id'] != 'PERSONAL' else [self.current_user]
         
-        def commit_edit(amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None):
+        def commit_edit(amt, sel, custom, desc, loc, is_private=False, tx_type="EXPENSE", payer=None, date=None, category="OTHER"):
             from tkinter import messagebox
             from datetime import datetime
             
@@ -325,7 +325,8 @@ class AccountingGUI(ctk.CTk):
                 custom_splits=custom, 
                 description=desc, 
                 location=loc,
-                timestamp=actual_date
+                timestamp=actual_date,
+                category=category
             ):
                 messagebox.showinfo("更新成功", "這筆帳單已經更新，並重置為「待確認」狀態退回給相關參與者。", parent=self)
                 self.refresh_ui()
@@ -351,9 +352,14 @@ class AccountingGUI(ctk.CTk):
     def run_settlement(self, mode="ORIGINAL"):
         """執行結算邏輯"""
         if self.current_group_id:
-            if self.system.settle_debts(self.current_group_id, self.current_user, mode=mode): 
+            res = self.system.settle_debts(self.current_group_id, self.current_user, mode=mode)
+            if res: 
                 self.refresh_ui()
-                mbox.showinfo("結算成功", f"此群組已依照「{mode}」模式完成結算！", parent=self)
+                items_str = "\n".join([f"· {it}" for it in res.get('items', [])])
+                msg = f"此群組已依照「{mode}」模式完成結算！\n\n[本次結清項目]:\n{items_str if items_str else '無項目'}"
+                mbox.showinfo("結算成功", msg, parent=self)
+            else:
+                mbox.showwarning("結算提示", "目前沒有需要結算的已確認帳單。", parent=self)
 
     def quick_charge(self, fid): 
         """快速向特定好友發起記帳"""

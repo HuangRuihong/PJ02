@@ -93,7 +93,7 @@ class GroupService(BaseService):
                 "remaining": budget - spent
             }
 
-    def propose_transaction(self, transaction_id, payer_id, amount_float, participants, group_id, custom_splits=None, tx_type=TransactionType.EXPENSE.name, description="", location="", timestamp=None):
+    def propose_transaction(self, transaction_id, payer_id, amount_float, participants, group_id, custom_splits=None, tx_type=TransactionType.EXPENSE.name, description="", location="", timestamp=None, category="OTHER"):
         """發起一筆新交易並計算分帳 (支援自定義時間)"""
         actual_ts = timestamp if timestamp else datetime.now()
         amount_twd = int(round(amount_float))
@@ -112,9 +112,9 @@ class GroupService(BaseService):
                             splits[uid] = base + (1 if i < rem else 0)
 
                 cursor.execute("""
-                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (transaction_id, group_id, payer_id, amount_twd, TransactionStatus.PENDING.name, tx_type, description, location, actual_ts))
+                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, category, description, location, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (transaction_id, group_id, payer_id, amount_twd, TransactionStatus.PENDING.name, tx_type, category, description, location, actual_ts))
                 
                 for uid, owed in splits.items():
                     status = TransactionStatus.CONFIRMED.name if uid == payer_id else TransactionStatus.PENDING.name
@@ -131,7 +131,7 @@ class GroupService(BaseService):
                 print(f"Error: {e}")
                 return False
 
-    def update_transaction(self, transaction_id, amount_float, participants, custom_splits=None, description='', location='', timestamp=None):
+    def update_transaction(self, transaction_id, amount_float, participants, custom_splits=None, description='', location='', timestamp=None, category='OTHER'):
         """修改一筆現有的帳單：將強迫所有參與者重置為 PENDING 狀態並更新主表金額等設定"""
         from shared.models import TransactionStatus
         from datetime import datetime
@@ -161,9 +161,9 @@ class GroupService(BaseService):
                 # 2. 更新主表內容
                 cursor.execute("""
                     UPDATE transactions 
-                    SET amount = ?, description = ?, location = ?, timestamp = ?, status = ?
+                    SET amount = ?, description = ?, location = ?, timestamp = ?, status = ?, category = ?
                     WHERE transaction_id = ?
-                """, (amount_twd, description, location, actual_ts, TransactionStatus.PENDING.name, transaction_id))
+                """, (amount_twd, description, location, actual_ts, TransactionStatus.PENDING.name, category, transaction_id))
                 
                 # 3. 抹除舊有參與者紀錄，重新建立（所有人變為 PENDING，付款人強制確認）
                 cursor.execute("DELETE FROM transaction_participants WHERE transaction_id = ?", (transaction_id,))
@@ -290,14 +290,14 @@ class GroupService(BaseService):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT transaction_id, payer_id, amount, status, type, description, location, timestamp
+                SELECT transaction_id, payer_id, amount, status, type, description, location, timestamp, category
                 FROM transactions
                 WHERE group_id = ?
                 ORDER BY timestamp DESC
             """, (group_id,))
             txs = []
             for r in cursor.fetchall():
-                tx = {"id": r[0], "payer": r[1], "amount": r[2], "status": r[3], "type": r[4], "description": r[5], "location": r[6], "time": r[7]}
+                tx = {"id": r[0], "payer": r[1], "amount": r[2], "status": r[3], "type": r[4], "description": r[5], "location": r[6], "time": r[7], "category": r[8]}
                 cursor.execute("SELECT user_id FROM transaction_participants WHERE transaction_id = ? AND status = ?", (r[0], TransactionStatus.PENDING.name))
                 tx["pending_confirmations"] = [p[0] for p in cursor.fetchall()]
                 txs.append(tx)
@@ -379,12 +379,16 @@ class GroupService(BaseService):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 1. 取得所有即將被結清的交易 ID 與 描述
                 cursor.execute("""
-                    SELECT DISTINCT t.transaction_id FROM transactions t
+                    SELECT DISTINCT t.transaction_id, t.description, t.amount FROM transactions t
                     JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
                     WHERE t.group_id = ? AND t.status = ? AND tp.status = ?
                 """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.CONFIRMED.name))
-                tids = [r[0] for r in cursor.fetchall()]
+                rows = cursor.fetchall()
+                tids = [r[0] for r in rows]
+                item_details = [f"{r[1] or '未命名'}(${r[2]})" for r in rows]
+                items_summary = " | ".join(item_details)
                 
                 for tid in tids:
                     cursor.execute("UPDATE transactions SET status = ? WHERE transaction_id = ?", (TransactionStatus.SETTLED.name, tid))
@@ -393,22 +397,23 @@ class GroupService(BaseService):
                 
                 for item in settlement_plan:
                     s_id = f"repay_{uuid.uuid4().hex[:8]}"
+                    desc = f"系統自動結算({mode})\n包含項目: {items_summary}"
                     cursor.execute("""
-                        INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, category, description, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (s_id, group_id, item['from'], item['amount'], TransactionStatus.PENDING.name, 
-                          TransactionType.SETTLEMENT.name, f"系統自動結算({mode})：還款給 {item['to']}", datetime.now()))
+                          TransactionType.SETTLEMENT.name, 'OTHER', desc, datetime.now()))
                     
                     cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at) VALUES (?, ?, ?, ?, ?)",
                                 (s_id, item['to'], item['amount'], TransactionStatus.PENDING.name, None))
                     cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status, settled_at) VALUES (?, ?, ?, ?, ?)",
                                 (s_id, item['from'], 0, TransactionStatus.SETTLED.name, datetime.now()))
                 conn.commit()
-                return settlement_plan
+                return {"plan": settlement_plan, "items": item_details}
             except Exception as e:
                 print(f"Settlement Error: {e}")
                 conn.rollback()
-                return []
+                return None
 
     def delete_group(self, group_id):
         """徹底刪除群組及其關聯的所有數據 (交易、參與者、成員)"""
@@ -459,14 +464,14 @@ class GroupService(BaseService):
             cursor = conn.cursor()
             # 1. 取得基本資訊
             cursor.execute("""
-                SELECT transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp
+                SELECT transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp, category
                 FROM transactions WHERE transaction_id = ?
             """, (transaction_id,))
             r = cursor.fetchone()
             if not r: return None
             
             tx = {"id": r[0], "group_id": r[1], "payer": r[2], "amount": r[3], "status": r[4], 
-                "type": r[5], "desc": r[6], "loc": r[7], "time": r[8]}
+                "type": r[5], "desc": r[6], "loc": r[7], "time": r[8], "category": r[9]}
             
             # 2. 取得所有參與者詳情
             cursor.execute("""
@@ -491,10 +496,10 @@ class GroupService(BaseService):
                 # 1. 建立還款交易主表
                 s_id = f"repay_{uuid.uuid4().hex[:8]}"
                 cursor.execute("""
-                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, category, description, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (s_id, group_id, debtor_id, amount, TransactionStatus.PENDING.name,
-                      TransactionType.SETTLEMENT.name, f"手動還款：{debtor_id} 還款給 {creditor_id}", now))
+                      TransactionType.SETTLEMENT.name, 'OTHER', f"手動還款：{debtor_id} 還款給 {creditor_id}", now))
 
                 # 2. 還款交易參與者：收款人 (設為 PENDING，需要收款人確認)
                 cursor.execute("""

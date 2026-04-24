@@ -33,21 +33,21 @@ class PersonalService(BaseService):
             cursor = conn.cursor()
             # 應付：我是參與者且對方是付款人
             cursor.execute("""
-                SELECT tp.transaction_id, t.payer_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
+                SELECT tp.transaction_id, t.payer_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type, t.category
                 FROM transaction_participants tp JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE tp.user_id = ? AND t.payer_id != ? AND tp.status != ? AND t.status != 'REJECTED'
                 AND t.type IN ('EXPENSE', 'REPAY_REQUEST', 'SETTLEMENT')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
-            payables = [{"tx_id":r[0],"creditor":r[1],"amount":r[2],"date":r[3],"status":r[4],"desc":r[5],"loc":r[6],"type":r[7]} for r in cursor.fetchall()]
+            payables = [{"tx_id":r[0],"creditor":r[1],"amount":r[2],"date":r[3],"status":r[4],"desc":r[5],"loc":r[6],"type":r[7],"category":r[8]} for r in cursor.fetchall()]
             
             # 應收：我是付款人且對方是參與者
             cursor.execute("""
-                SELECT tp.transaction_id, tp.user_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type
+                SELECT tp.transaction_id, tp.user_id, tp.owed_amount, t.timestamp, tp.status, t.description, t.location, t.type, t.category
                 FROM transaction_participants tp JOIN transactions t ON tp.transaction_id = t.transaction_id
                 WHERE t.payer_id = ? AND tp.user_id != ? AND tp.status != ? AND t.status != 'REJECTED'
                 AND t.type IN ('EXPENSE', 'REPAY_REQUEST', 'SETTLEMENT')
             """, (user_id, user_id, TransactionStatus.SETTLED.name))
-            receivables = [{"tx_id":r[0],"debtor":r[1],"amount":r[2],"date":r[3],"status":r[4],"desc":r[5],"loc":r[6],"type":r[7]} for r in cursor.fetchall()]
+            receivables = [{"tx_id":r[0],"debtor":r[1],"amount":r[2],"date":r[3],"status":r[4],"desc":r[5],"loc":r[6],"type":r[7],"category":r[8]} for r in cursor.fetchall()]
         return payables, receivables
 
     def request_settlement(self, debtor_id, creditor_id, amount, method, tx_ids):
@@ -57,8 +57,8 @@ class PersonalService(BaseService):
         try:
             with self._get_connection() as conn:
                 cursor, s_id = conn.cursor(), f"req_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(100, 999)}"
-                cursor.execute("INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                             (s_id, "PERSONAL", debtor_id, amount, TransactionStatus.PENDING.name, 'REPAY_REQUEST', f"[結清申請] 透過 {method} 償還", ",".join(tx_ids), datetime.now()))
+                cursor.execute("INSERT INTO transactions (transaction_id, group_id, payer_id, amount, status, type, description, location, timestamp, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             (s_id, "PERSONAL", debtor_id, amount, TransactionStatus.PENDING.name, 'REPAY_REQUEST', f"[結清申請] 透過 {method} 償還", ",".join(tx_ids), datetime.now(), 'OTHER'))
                 cursor.execute("INSERT INTO transaction_participants (transaction_id, user_id, owed_amount, status) VALUES (?, ?, ?, ?)",
                              (s_id, creditor_id, amount, TransactionStatus.PENDING.name))
                 conn.commit()
@@ -71,12 +71,12 @@ class PersonalService(BaseService):
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT t.transaction_id, t.group_id, t.amount, t.description, t.timestamp, t.status, t.payer_id, 
-                       CASE WHEN t.group_id = 'PERSONAL' THEN '[個人私帳]' ELSE COALESCE(g.name, t.group_id) END, tp.owed_amount
+                       CASE WHEN t.group_id = 'PERSONAL' THEN '[個人私帳]' ELSE COALESCE(g.name, t.group_id) END, tp.owed_amount, t.category
                 FROM transactions t JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
                 LEFT JOIN groups g ON t.group_id = g.group_id
                 WHERE tp.user_id = ? AND t.type IN ('EXPENSE', 'SETTLEMENT', 'REPAY_REQUEST') ORDER BY t.timestamp DESC
             """, (user_id,))
-            return [{"id":r[0],"group_id":r[1],"amount":r[2],"description":r[3],"timestamp":r[4],"status":r[5],"payer_id":r[6],"group_name":r[7],"my_share":r[8]} for r in cursor.fetchall()]
+            return [{"id":r[0],"group_id":r[1],"amount":r[2],"description":r[3],"timestamp":r[4],"status":r[5],"payer_id":r[6],"group_name":r[7],"my_share":r[8],"category":r[9]} for r in cursor.fetchall()]
 
     def get_user_summary(self, user_id):
         """獲取使用者與所有人的債務關係總結 (單一 SQL 高效優化版)"""
@@ -91,4 +91,17 @@ class PersonalService(BaseService):
                   AND t.status = 'CONFIRMED' AND tp.status = 'CONFIRMED' AND t.type IN ('EXPENSE', 'REPAY_REQUEST')
                 GROUP BY other_user
             """, (user_id, user_id, user_id, user_id))
+            return {r[0]: r[1] for r in cursor.fetchall()}
+
+    def get_spending_by_category(self, user_id):
+        """統計各分類的支出總額 (僅統計已確認的個人應付額度)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT t.category, SUM(tp.owed_amount)
+                FROM transactions t
+                JOIN transaction_participants tp ON t.transaction_id = tp.transaction_id
+                WHERE tp.user_id = ? AND t.type = 'EXPENSE' AND t.status != 'REJECTED'
+                GROUP BY t.category
+            """, (user_id,))
             return {r[0]: r[1] for r in cursor.fetchall()}

@@ -2,6 +2,7 @@ import customtkinter as ctk
 from PIL import Image
 from datetime import datetime
 from tkcalendar import DateEntry
+from shared.models import Category
 
 class JoinGroupDialog(ctk.CTkToplevel):
     """加入群組對話框：讓使用者輸入 4 位邀群碼以加入特定群組"""
@@ -96,6 +97,15 @@ class AddTransactionDialog(ctk.CTkToplevel):
         self.amt_entry = ctk.CTkEntry(self, placeholder_text="0", width=180, height=40, font=ctk.CTkFont(size=18, weight="bold"))
         self.amt_entry.pack(pady=5)
         self.amt_entry.bind("<KeyRelease>", lambda e: self.auto_split())
+
+        # --- 分類選擇 (New) ---
+        cat_frame = ctk.CTkFrame(self, fg_color="transparent")
+        cat_frame.pack(fill="x", padx=40, pady=5)
+        ctk.CTkLabel(cat_frame, text="消費分類:").pack(side="left", padx=5)
+        self.cat_options = [c.label for c in Category]
+        self.cat_var = ctk.StringVar(value=Category.OTHER.label)
+        self.cat_opt = ctk.CTkOptionMenu(cat_frame, values=self.cat_options, variable=self.cat_var)
+        self.cat_opt.pack(side="right", fill="x", expand=True)
 
         # --- 日期選擇 (New: 統一為 YYYY/MM/DD) ---
         date_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -199,6 +209,14 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 else: d = raw_ts
                 self.date_entry.set_date(d.date())
             except: pass
+
+        if self.initial_data.get('category'):
+            c_name = self.initial_data.get('category')
+            # 尋找對應的 label
+            for c in Category:
+                if c.name == c_name:
+                    self.cat_var.set(c.label)
+                    break
 
         self.mode_var.set(self.MODE_PRIVATE if self.initial_data.get('group_id') == 'PERSONAL' else self.MODE_CUSTOM)
         if self.mode_var.get() == self.MODE_CUSTOM and not self.show_extra:
@@ -337,7 +355,13 @@ class AddTransactionDialog(ctk.CTkToplevel):
                 return
 
             if total > 0 and sel:
-                self.callback(total, sel, custom_splits, desc, loc, is_private=is_private, payer=payer, date=final_date)
+                # 尋找對應的 Category Enum Name
+                final_cat = Category.OTHER.name
+                for c in Category:
+                    if c.label == self.cat_var.get():
+                        final_cat = c.name
+                        break
+                self.callback(total, sel, custom_splits, desc, loc, is_private=is_private, payer=payer, date=final_date, category=final_cat)
                 self.destroy()
             else:
                 from tkinter import messagebox
@@ -373,6 +397,13 @@ class TransactionDetailDialog(ctk.CTkToplevel):
         desc = self.details['desc'] or "無描述"
         desc_label = ctk.CTkLabel(header, text=desc, font=ctk.CTkFont(size=16))
         desc_label.pack(pady=5)
+
+        # 顯示分類 (New)
+        cat_name = self.details.get('category', 'OTHER')
+        cat_obj = Category[cat_name] if cat_name in Category.__members__ else Category.OTHER
+        cat_tag = ctk.CTkLabel(header, text=f"{cat_obj.icon} {cat_obj.label}", 
+                               text_color=cat_obj.color, font=ctk.CTkFont(size=14, weight="bold"))
+        cat_tag.pack()
         
         # 基礎資訊區 (地點與時間)
         info_frame = ctk.CTkFrame(self)

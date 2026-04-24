@@ -47,7 +47,7 @@ class NetworkDebtSystem:
     # --- 交易相關轉發 ---
     def propose_transaction(self, transaction_id, payer_id, amount, participants, 
                           group_id, custom_splits=None, tx_type="EXPENSE", 
-                          description="", location="", timestamp=None):
+                          description="", location="", timestamp=None, category="OTHER"):
         data = {
             "transaction_id": transaction_id,
             "payer_id": payer_id,
@@ -56,6 +56,7 @@ class NetworkDebtSystem:
             "group_id": group_id,
             "custom_splits": custom_splits,
             "tx_type": tx_type,
+            "category": category,
             "description": description,
             "location": location,
             "timestamp": timestamp.isoformat() if timestamp else None

@@ -41,6 +41,7 @@ class BaseService:
                     amount INTEGER,
                     status TEXT,
                     type TEXT DEFAULT 'EXPENSE',
+                    category TEXT DEFAULT 'OTHER',
                     description TEXT,
                     location TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP

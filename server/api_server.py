@@ -25,6 +25,7 @@ class TransactionPropose(BaseModel):
     group_id: str
     custom_splits: Optional[Dict[str, float]] = None
     tx_type: str = "EXPENSE"
+    category: str = "OTHER"
     description: str = ""
     location: str = ""
     timestamp: Optional[datetime] = None
@@ -65,7 +66,8 @@ def propose_transaction(tx: TransactionPropose):
     success = system.propose_transaction(
         tx.transaction_id, tx.payer_id, tx.amount, tx.participants, 
         tx.group_id, tx.custom_splits, tx.tx_type, tx.description, 
-        tx.location, tx.timestamp or datetime.now()
+        tx.location, tx.timestamp or datetime.now(),
+        category=tx.category
     )
     if success:
         return {"status": "success"}

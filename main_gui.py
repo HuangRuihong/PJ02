@@ -53,9 +53,6 @@ class AccountingGUI(ctk.CTk):
         self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.scheduler_thread.start()
         
-        # 改為「視窗焦點觸發」：當使用者切換回此視窗時自動刷新
-        self.bind("<FocusIn>", self.on_focus_refresh)
-        
         # 檢查自動登入狀態
         self.check_auto_login()
 
@@ -152,7 +149,7 @@ class AccountingGUI(ctk.CTk):
         ctk.CTkButton(self.sidebar, text="+ 加入群組", command=self.open_join_group).pack(pady=5, padx=10, fill="x")
         ctk.CTkButton(self.sidebar, text="+ 建立新群組", command=self.open_create_group).pack(pady=5, padx=10, fill="x")
         
-        self.tabview = ctk.CTkTabview(self.main_container)
+        self.tabview = ctk.CTkTabview(self.main_container, command=self.on_tab_change)
         self.tabview.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         
         tab_personal = self.tabview.add("個人中心")
@@ -227,14 +224,11 @@ class AccountingGUI(ctk.CTk):
         try: self.tab_f.refresh()
         except Exception as e: print(f"Refresh Friends Error: {e}")
 
-    def on_focus_refresh(self, event=None):
-        """當視窗重新獲得焦點時觸發的高效刷新"""
-        # 檢查 event.widget == self 是為了避免子元件獲取焦點時重複觸發
-        if event and event.widget == self and self.current_user:
-            try:
-                print("[觸發] 視窗重新獲得焦點，執行同步刷新...")
-                self.refresh_ui()
-            except: pass
+    def on_tab_change(self):
+        """當切換分頁標籤時觸發刷新"""
+        if self.current_user:
+            print(f"[切換分頁] 目前分頁: {self.tabview.get()}，執行數據刷新...")
+            self.refresh_ui()
 
     def switch_group(self, name):
         """切換目前活動群組"""

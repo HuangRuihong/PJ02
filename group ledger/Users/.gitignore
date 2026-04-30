@@ -1,0 +1,34 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite databases (MODIFIED: Enabled for Git Sync)
+# backend/data/accounting.db
+# *.db
+# *.db-journal
+# *.db-shm
+# *.db-wal
+
+# QR code images
+backend/data/qr_*.png
+
+# Local configurations
+backend/data/config.json
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+.vs/
+*.sln
+*.suo

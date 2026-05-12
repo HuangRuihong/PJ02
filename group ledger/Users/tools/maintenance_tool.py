@@ -69,7 +69,7 @@ def upload_changes():
     # 嘗試提交，若無變動則會失敗但我們會繼續嘗試推送 (以防有尚未推送的 commit)
     run_command(f'git commit -m "{msg}"', cwd=root_dir)
     
-    if run_command("git push", cwd=root_dir):
+    if run_command("git push origin HEAD", cwd=root_dir):
         print("\n[成功] 變更已推送到伺服器。")
     else:
         print("\n[失敗] 推送過程中發生錯誤，請檢查網路或衝突。")

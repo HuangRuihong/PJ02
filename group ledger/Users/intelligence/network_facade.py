@@ -31,15 +31,15 @@ class NetworkDebtSystem:
 
     # --- 群組相關轉發 ---
     def create_group_with_code(self, creator_id, group_name):
-        res = self._post("/api/group/create", {"creator_id": creator_id, "group_name": group_name})
-        return res.get("group_id"), res.get("join_code")
+        res = self._post("/api/group/create", {"user_id": creator_id, "name": group_name})
+        return res.get("group_id"), res.get("code")
 
     def join_group_by_code(self, user_id, join_code):
-        res = self._post("/api/group/join", {"user_id": user_id, "join_code": join_code})
-        return res.get("success", False)
+        res = self._post("/api/group/join", {"user_id": user_id, "code": join_code})
+        return res.get("status") == "success"
 
     def get_user_groups(self, user_id):
-        return self._get(f"/api/user/{user_id}/groups")
+        return self._get(f"/api/groups/{user_id}")
 
     def get_group_members(self, group_id):
         return self._get(f"/api/group/{group_id}/members")

@@ -6,7 +6,6 @@ echo   [Server Mode] Group Ledger API Server
 echo ==========================================
 echo.
 
-:: 取得本機 Wi-Fi IPv4 位址
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4"') do (
     set "local_ip=%%a"
     goto :found

@@ -1,0 +1,1 @@
+chore[tools]: upgrade maintenance tool to V2.1 with UTF-8 support and branch alignment

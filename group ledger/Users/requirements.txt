@@ -6,3 +6,5 @@ schedule
 requests
 fastapi
 uvicorn
+python-dotenv
+pytest

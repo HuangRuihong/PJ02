@@ -91,7 +91,11 @@ class PersonalFrame(ctk.CTkFrame):
         """畫出第二區塊：待確認通知匣"""
         ctk.CTkLabel(self.inbox_frame, text="待辦事項 (需要你驗證的帳款)", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
         if not self.pending_inbox:
-            ctk.CTkLabel(self.inbox_frame, text="目前沒有需要驗證的帳款喔！", text_color="gray").pack(pady=10); return
+            empty_inbox = ctk.CTkFrame(self.inbox_frame, fg_color="transparent")
+            empty_inbox.pack(fill="x", pady=20)
+            ctk.CTkLabel(empty_inbox, text="📥", font=ctk.CTkFont(size=32)).pack()
+            ctk.CTkLabel(empty_inbox, text="目前沒有需要驗證的帳款喔！", text_color="gray").pack()
+            return
             
         for item in self.pending_inbox:
             card = ctk.CTkFrame(self.inbox_frame, border_width=1, border_color="#e67e22")
@@ -121,7 +125,11 @@ class PersonalFrame(ctk.CTkFrame):
         """畫出第三區塊：歷史紀錄清單"""
         ctk.CTkLabel(self.history_frame, text="最近的帳務紀錄", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(20, 10))
         if not self.history_data:
-            ctk.CTkLabel(self.history_frame, text="尚無任何歷史紀錄。", text_color="gray").pack(pady=10); return
+            empty_history = ctk.CTkFrame(self.history_frame, fg_color="transparent")
+            empty_history.pack(fill="x", pady=20)
+            ctk.CTkLabel(empty_history, text="📜", font=ctk.CTkFont(size=32)).pack()
+            ctk.CTkLabel(empty_history, text="尚無任何歷史紀錄。", text_color="gray").pack()
+            return
 
         last_date = None
         for item in self.history_data[:20]:

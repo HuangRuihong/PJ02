@@ -89,6 +89,14 @@ class GroupFrame(ctk.CTkFrame):
         for w in self.scroll.winfo_children(): w.destroy()
         
         txs = self.system.get_group_transactions(gid)
+        if not txs:
+            empty_f = ctk.CTkFrame(self.scroll, fg_color="transparent")
+            empty_f.pack(expand=True, fill="both", pady=100)
+            ctk.CTkLabel(empty_f, text="🏠", font=ctk.CTkFont(size=48)).pack()
+            ctk.CTkLabel(empty_f, text="目前尚無活動紀錄\n點擊上方「+ 記一筆」開始吧！", 
+                         font=ctk.CTkFont(size=14), text_color="gray").pack(pady=10)
+            return
+
         last_date = None
         for tx in txs:
             # 取得並格式化日期
@@ -227,29 +235,12 @@ class GroupFrame(ctk.CTkFrame):
                 messagebox.showerror("錯誤", "無法存取剪貼簿。", parent=self.winfo_toplevel())
 
     def handle_settle(self, mode):
-        """處理結算按鈕點擊"""
+        """處理結算按鈕點擊：調用主視窗的優化邏輯"""
         from tkinter import messagebox
-        
         confirm = messagebox.askyesno("確認結算", f"確定要執行「{ '一般' if mode=='ORIGINAL' else '智慧' }結算」嗎？\n這將會產生還款單並將目前的消費標記為已結清。", parent=self.winfo_toplevel())
-        if not confirm: return
-        
-        res = self.system.settle_debts(self.gid, self.current_user, mode=mode)
-        if not res or not res.get('plan'):
-            messagebox.showinfo("結算結果", "目前沒有已確認且未結算的交易項目。", parent=self.winfo_toplevel())
-            return
-            
-        # 顯示結算計畫結果
-        plan = res['plan']
-        items = res.get('items', [])
-        items_str = "\n".join([f"  · {it}" for it in items])
-        result_str = "\n".join([f"· {p['from']} 應給 {p['to']} ${p['amount']:,}元" for p in plan])
-        
-        messagebox.showinfo("結算計畫已生成", 
-            f"已使用「{mode}」模式完成計算。\n\n"
-            f"[本次結清項目]:\n{items_str}\n\n"
-            f"[建議還款方式]:\n{result_str}\n\n"
-            "上述還款紀錄已正式登錄於系統活動紀錄中。\n所有相關支出已標記為已結清。", parent=self.winfo_toplevel())
-        self.winfo_toplevel().refresh_ui()
+        if confirm:
+            # 調用 AccountingGUI.run_settlement 以使用統一的視覺回饋與錯誤處理
+            self.winfo_toplevel().run_settlement(mode=mode)
 
     def handle_delete(self):
         """處理刪除群組按鈕點擊：實作二次確認"""

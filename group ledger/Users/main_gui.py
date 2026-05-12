@@ -197,37 +197,52 @@ class AccountingGUI(ctk.CTk):
 
     def refresh_ui(self):
         """刷新全局界面：更新側邊欄群組選單與各分頁內容"""
-        groups = self.system.get_user_groups(self.current_user)
-        names = [g["name"] for g in groups]
-        self.group_opt.configure(values=names)
+        # 顯示同步中狀態
+        self.sync_label.configure(text="同步中...", text_color="#3498db")
+        self.update_idletasks() # 強制介面立即更新
         
-        if names:
-            if self.current_group_name in names:
-                self.group_opt.set(self.current_group_name)
+        try:
+            groups = self.system.get_user_groups(self.current_user)
+            # 檢查是否為錯誤回報格式
+            if isinstance(groups, dict) and not groups.get("success", True):
+                 error_msg = groups.get("error", "未知錯誤")
+                 self.sync_label.configure(text=f"同步失敗: {error_msg[:10]}...", text_color="#e74c3c")
+                 return
+
+            names = [g["name"] for g in groups]
+            self.group_opt.configure(values=names)
+            
+            if names:
+                if self.current_group_name in names:
+                    self.group_opt.set(self.current_group_name)
+                else:
+                    self.group_opt.set(names[0])
             else:
-                self.group_opt.set(names[0])
-        else:
-            self.group_opt.set("(尚無群組)")
-        
-        # 分別刷新各分頁，避免單一組件報錯導致後續分頁無法刷新
-        try: self.tab_p.refresh()
-        except Exception as e: print(f"Refresh Personal Error: {e}")
-        
-        try: self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
-        except Exception as e: print(f"Refresh Group Error: {e}")
-        
-        try: self.tab_a.refresh(self.current_group_id)
-        except Exception as e: print(f"Refresh Analysis Error: {e}")
-        
-        try: self.tab_c.refresh(self.current_group_id)
-        except Exception as e: print(f"Refresh Calendar Error: {e}")
-        
-        try: self.tab_f.refresh()
-        except Exception as e: print(f"Refresh Friends Error: {e}")
-        
-        # 更新同步狀態顯示
-        now_str = datetime.now().strftime("%H:%M:%S")
-        self.sync_label.configure(text=f"最後同步: {now_str}", text_color="#2ecc71")
+                self.group_opt.set("(尚無群組)")
+            
+            # 分別刷新各分頁，捕捉特定組件錯誤
+            try: self.tab_p.refresh()
+            except Exception as e: print(f"Refresh Personal Error: {e}")
+            
+            try: self.tab_g.refresh(self.current_group_id, self.current_group_name, self.current_group_code, self.current_user)
+            except Exception as e: print(f"Refresh Group Error: {e}")
+            
+            try: self.tab_a.refresh(self.current_group_id)
+            except Exception as e: print(f"Refresh Analysis Error: {e}")
+            
+            try: self.tab_c.refresh(self.current_group_id)
+            except Exception as e: print(f"Refresh Calendar Error: {e}")
+            
+            try: self.tab_f.refresh()
+            except Exception as e: print(f"Refresh Friends Error: {e}")
+            
+            # 更新同步狀態顯示
+            now_str = datetime.now().strftime("%H:%M:%S")
+            self.sync_label.configure(text=f"最後同步: {now_str}", text_color="#2ecc71")
+            
+        except Exception as e:
+            self.sync_label.configure(text=f"連線異常: {str(e)[:15]}", text_color="#f39c12")
+            print(f"Global Refresh Error: {e}")
 
     def auto_refresh_loop(self):
         """背景自動刷新迴圈 (每 20 秒一次)"""
@@ -365,6 +380,10 @@ class AccountingGUI(ctk.CTk):
     def run_settlement(self, mode="ORIGINAL"):
         """執行結算邏輯"""
         if self.current_group_id:
+            # 視覺鎖定與提示
+            self.sync_label.configure(text=f"結算中 ({mode})...", text_color="#f1c40f")
+            self.update_idletasks()
+            
             res = self.system.settle_debts(self.current_group_id, self.current_user, mode=mode)
             if res: 
                 self.refresh_ui()
@@ -372,6 +391,7 @@ class AccountingGUI(ctk.CTk):
                 msg = f"此群組已依照「{mode}」模式完成結算！\n\n[本次結清項目]:\n{items_str if items_str else '無項目'}"
                 mbox.showinfo("結算成功", msg, parent=self)
             else:
+                self.refresh_ui() # 恢復狀態
                 mbox.showwarning("結算提示", "目前沒有需要結算的已確認帳單。", parent=self)
 
     def quick_charge(self, fid): 

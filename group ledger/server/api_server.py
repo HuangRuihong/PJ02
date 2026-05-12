@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime
 import os
 import sys
+from dotenv import load_dotenv
 
 # 確保能從根目錄導入模組
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Users"))
@@ -12,7 +13,15 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 from intelligence.debt_system import DebtSystem
 from shared.models import TransactionStatus
 
+# 載入環境變數
+load_dotenv()
+
 app = FastAPI(title="Group Ledger API Server", version="2.0.0")
+
+# 配置與狀態
+SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
+SERVER_PORT = int(os.getenv("SERVER_PORT", 8000))
+
 system = DebtSystem()
 
 # --- 資料模型 ---
@@ -177,4 +186,4 @@ def scan_overdue():
     return system.check_overdue_transactions()
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

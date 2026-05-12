@@ -33,9 +33,6 @@ def update_db():
         if "join_code" not in group_cols:
             print("-> 更新 groups 表：加入 join_code...")
             cursor.execute("ALTER TABLE groups ADD COLUMN join_code TEXT")
-        if "budget" not in group_cols:
-            print("-> 更新 groups 表：加入 budget...")
-            cursor.execute("ALTER TABLE groups ADD COLUMN budget INTEGER DEFAULT 0")
             
         cursor.execute("PRAGMA table_info(transactions)")
         tx_cols = [c[1] for c in cursor.fetchall()]
@@ -70,7 +67,7 @@ def upload_changes():
 
     if run_command("git add .", cwd=root_dir) and \
        run_command(f'git commit -m "{msg}"', cwd=root_dir) and \
-       run_command("git push origin main", cwd=root_dir):
+       run_command("git push origin master", cwd=root_dir):
         print("\n[成功] 變更已推送到伺服器。")
     else:
         print("\n[失敗] 推送過程中發生錯誤。")
@@ -79,7 +76,7 @@ def sync_latest():
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     print("\n[功能] 正在從遠端同步最新程式碼 (git pull)...")
     
-    if run_command("git pull origin main", cwd=root_dir):
+    if run_command("git pull origin master", cwd=root_dir):
         print("\n[成功] 程式碼同步完成。")
         update_db()
     else:

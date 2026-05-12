@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from datetime import datetime
-from shared.dialogs import TransactionDetailDialog, BudgetDialog
+from shared.dialogs import TransactionDetailDialog
 from shared.models import Category
 
 
@@ -9,7 +9,6 @@ class GroupFrame(ctk.CTkFrame):
     def __init__(self, parent, system):
         super().__init__(parent, fg_color="transparent")
         self.system = system
-        self.budget_val = 0  # 預先初始化避免 AttributeError
         self.setup_ui()
 
     def setup_ui(self):
@@ -52,17 +51,6 @@ class GroupFrame(ctk.CTkFrame):
         self.scroll = ctk.CTkFrame(self)
         self.scroll.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # 預算卡片：改為在頂部資訊區 pack，避免遮擋長清單
-        self.budget_card = ctk.CTkFrame(self, fg_color="#2c3e50", corner_radius=10, border_width=1, border_color="#34495e")
-        self.budget_card.pack(fill="x", padx=20, pady=5)
-        
-        self.budget_label = ctk.CTkLabel(self.budget_card, text="預算: 加載中...", font=ctk.CTkFont(size=14, weight="bold"), text_color="#2ecc71")
-        self.budget_label.pack(side="left", padx=15, pady=8)
-        
-        # 綁定點擊事件以設定預算
-        self.budget_card.bind("<Button-1>", lambda e: self.open_set_budget())
-        self.budget_label.bind("<Button-1>", lambda e: self.open_set_budget())
-
     def refresh(self, gid, gname, gcode, current_user):
         self.gid, self.current_user = gid, current_user
         
@@ -75,7 +63,6 @@ class GroupFrame(ctk.CTkFrame):
             self.delete_btn.grid_remove()
             self.add_btn.grid_remove()
             self.refresh_btn.grid_remove()
-            self.budget_card.pack_forget()
             for w in self.scroll.winfo_children(): w.destroy()
             return
         
@@ -98,12 +85,6 @@ class GroupFrame(ctk.CTkFrame):
         # 載入並顯示成員名單
         members = self.system.get_group_members(gid)
         self.members_label.configure(text=f"成員: {', '.join(members)}")
-        
-        # 載入並刷新預算資訊
-        budget_info = self.system.get_group_budget_status(gid)
-        self.budget_val = budget_info["budget"]
-        # 使用者要求格式：預算：$XX,XXX元 (僅顯示剩餘預算數字)
-        self.budget_label.configure(text=f"預算: ${budget_info['remaining']:,}元")
         
         for w in self.scroll.winfo_children(): w.destroy()
         
@@ -283,19 +264,7 @@ class GroupFrame(ctk.CTkFrame):
             else:
                 messagebox.showerror("錯誤", "刪除群組時發生錯誤。", parent=self.winfo_toplevel())
 
-    def open_set_budget(self):
-        """開啟預算設定對話框"""
-        BudgetDialog(self.winfo_toplevel(), self.budget_val, self.save_budget_cb)
-
     def _get_status_info(self, status):
         """根據狀態回傳顏色與顯示文字 (Person A 同步優化：使用全域統一映射)"""
         from shared.models import TransactionStatus
         return TransactionStatus.get_ui_info(status)
-
-    def save_budget_cb(self, amount):
-        """儲存預算後的回調"""
-        if self.system.set_group_budget(self.gid, amount):
-            self.refresh(self.gid, self.winfo_toplevel().current_group_name, self.winfo_toplevel().current_group_code, self.current_user)
-        else:
-            from tkinter import messagebox
-            messagebox.showerror("錯誤", "無法存取資料庫設定預算。", parent=self.winfo_toplevel())

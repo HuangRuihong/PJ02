@@ -1,5 +1,6 @@
 import requests
 import json
+import time
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 import os
@@ -13,21 +14,27 @@ class NetworkDebtSystem:
         self.base_url = base_url
         self.current_user = None
 
-    def _post(self, path, data):
-        try:
-            res = requests.post(f"{self.base_url}{path}", json=data, timeout=5)
-            return res.json()
-        except Exception as e:
-            print(f"Network Error (POST {path}): {e}")
-            return {"success": False, "error": str(e)}
+    def _post(self, path, data, retries=2):
+        for i in range(retries + 1):
+            try:
+                res = requests.post(f"{self.base_url}{path}", json=data, timeout=5)
+                return res.json()
+            except Exception as e:
+                if i == retries:
+                    print(f"Network Error (POST {path}): {e}")
+                    return {"success": False, "error": str(e)}
+                time.sleep(0.5)
 
-    def _get(self, path):
-        try:
-            res = requests.get(f"{self.base_url}{path}", timeout=5)
-            return res.json()
-        except Exception as e:
-            print(f"Network Error (GET {path}): {e}")
-            return [] if "/groups" in path or "/members" in path else {}
+    def _get(self, path, retries=2):
+        for i in range(retries + 1):
+            try:
+                res = requests.get(f"{self.base_url}{path}", timeout=5)
+                return res.json()
+            except Exception as e:
+                if i == retries:
+                    print(f"Network Error (GET {path}): {e}")
+                    return [] if "/groups" in path or "/members" in path else {}
+                time.sleep(0.5)
 
     # --- 群組相關轉發 ---
     def create_group_with_code(self, creator_id, group_name):
@@ -134,12 +141,6 @@ class NetworkDebtSystem:
         res = self._post("/api/transaction/settle_specific", {"debtor_id": debtor_id, "creditor_id": creditor_id, "tx_ids": tx_ids})
         return res.get("success", False)
 
-    def get_group_budget_status(self, group_id):
-        return self._get(f"/api/group/{group_id}/budget")
-
-    def set_group_budget(self, group_id, amount):
-        res = self._post(f"/api/group/{group_id}/budget", {"group_id": group_id, "amount": amount})
-        return res.get("success", False)
 
     def generate_group_bill_summary(self, group_id):
         res = self._get(f"/api/group/{group_id}/summary")

@@ -110,6 +110,7 @@ class AccountingGUI(ctk.CTk):
         self.update_idletasks() # 確保介面容器已建立再載入數據
         self.load_initial_data()
         self.after(1000, self.check_overdue_and_remind)
+        self.after(20000, self.auto_refresh_loop) # 啟動背景自動刷新
 
     def check_overdue_and_remind(self):
         """啟動檢查逾期帳務並彈窗提醒"""
@@ -136,10 +137,6 @@ class AccountingGUI(ctk.CTk):
                                     text_color="#e74c3c", hover_color="#2c2c2c", height=28)
         self.logout_btn.pack(pady=(0, 25), padx=20)
         
-        self.quick_add_btn = ctk.CTkButton(self.sidebar, text="快速記帳 (Quick Add)", 
-                                        command=self.open_global_add_tx,
-                                        fg_color="#3498db", hover_color="#2980b9", height=45, font=ctk.CTkFont(weight="bold"))
-        self.quick_add_btn.pack(pady=15, padx=15, fill="x")
         
         ctk.CTkLabel(self.sidebar, text="選擇群組", font=ctk.CTkFont(size=12)).pack(pady=(10, 0))
         self.group_opt = ctk.CTkOptionMenu(self.sidebar, values=[], command=self.switch_group)
@@ -148,6 +145,9 @@ class AccountingGUI(ctk.CTk):
         
         ctk.CTkButton(self.sidebar, text="+ 加入群組", command=self.open_join_group).pack(pady=5, padx=10, fill="x")
         ctk.CTkButton(self.sidebar, text="+ 建立新群組", command=self.open_create_group).pack(pady=5, padx=10, fill="x")
+        
+        self.sync_label = ctk.CTkLabel(self.sidebar, text="同步狀態: 就緒", font=ctk.CTkFont(size=10), text_color="gray")
+        self.sync_label.pack(side="bottom", pady=10)
         
         self.tabview = ctk.CTkTabview(self.main_container, command=self.on_tab_change)
         self.tabview.pack(side="right", fill="both", expand=True, padx=20, pady=20)
@@ -169,6 +169,7 @@ class AccountingGUI(ctk.CTk):
         
         self.tab_c = CalendarFrame(scroll_p, self.system, self.current_user)
         self.tab_c.pack(fill="x", pady=30)
+        
         
         tab_group = self.tabview.add("群組中心")
         scroll_g = ctk.CTkScrollableFrame(tab_group, fg_color="transparent")
@@ -223,6 +224,26 @@ class AccountingGUI(ctk.CTk):
         
         try: self.tab_f.refresh()
         except Exception as e: print(f"Refresh Friends Error: {e}")
+        
+        # 更新同步狀態顯示
+        now_str = datetime.now().strftime("%H:%M:%S")
+        self.sync_label.configure(text=f"最後同步: {now_str}", text_color="#2ecc71")
+
+    def auto_refresh_loop(self):
+        """背景自動刷新迴圈 (每 20 秒一次)"""
+        if self.current_user:
+            # 只有在視窗沒被最小化且處於焦點時才頻繁刷新，節省資源
+            try:
+                # 取得目前所選分頁，如果是群組中心或個人中心則執行刷新
+                current_tab = self.tabview.get()
+                if current_tab in ["個人中心", "群組中心"]:
+                    print(f"[自動同步] 執行中 ({datetime.now().strftime('%H:%M:%S')})...")
+                    self.refresh_ui()
+            except Exception as e:
+                print(f"Auto refresh error: {e}")
+        
+        # 繼續下一次循環
+        self.after(20000, self.auto_refresh_loop)
 
     def on_tab_change(self):
         """當切換分頁標籤時觸發刷新"""
@@ -261,14 +282,6 @@ class AccountingGUI(ctk.CTk):
             self.load_initial_data(target_gid=gid)
         else:
             mbox.showerror("錯誤", "建立群組時發生未知錯誤。", parent=self)
-
-    def open_global_add_tx(self):
-        """側邊欄全局快速記帳：直接與當前群組功能綁定"""
-        if not self.current_group_id:
-            from tkinter import messagebox
-            messagebox.showwarning("提示", "請先選擇右上角群組！", parent=self)
-            return
-        self.open_add_tx()
 
     def open_add_tx(self, force_participant=None):
         """(原有的) 針對特定群組開啟新增交易對話框"""

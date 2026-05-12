@@ -36,6 +36,7 @@ class GroupService(BaseService):
                     VALUES (?, ?)
                 """, (group_id, creator_id))
                 
+                conn.commit()
                 return group_id, join_code
         except Exception: 
             return None, None
@@ -97,50 +98,6 @@ class GroupService(BaseService):
             """, (group_id,))
             return [row[0] for row in cursor.fetchall()]
 
-    def set_group_budget(self, group_id, amount):
-        """設定群組的總預算金額"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("""
-                    UPDATE groups 
-                    SET budget = ?          -- 更新預算金額
-                    WHERE group_id = ?
-                """, (amount, group_id))
-                conn.commit()
-                return True
-            except Exception: 
-                return False
-
-    def get_group_budget_status(self, group_id):
-        """獲取群組預算剩餘狀況 (僅統計已確認 [CONFIRMED/SETTLED] 的支出)"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # 1. 取得總預算
-            cursor.execute("""
-                SELECT budget               -- 群組設定的總預算
-                FROM groups 
-                WHERE group_id = ?
-            """, (group_id,))
-            row = cursor.fetchone()
-            budget = row[0] if row else 0
-            
-            # 2. 取得該群組累積支出 (僅統計已入帳的 EXPENSE)
-            cursor.execute("""
-                SELECT SUM(amount)          -- 統計該群組的總消費金額
-                FROM transactions 
-                WHERE group_id = ?          -- 條件1：限定本群組
-                  AND type = 'EXPENSE'      -- 條件2：必須是消費支出
-                  AND status IN (?, ?)      -- 條件3：必須是已確認或已結清的帳單
-            """, (group_id, TransactionStatus.CONFIRMED.name, TransactionStatus.SETTLED.name))
-            spent = cursor.fetchone()[0] or 0
-            
-            return {
-                "budget": budget,
-                "spent": spent,
-                "remaining": budget - spent
-            }
 
     def propose_transaction(self, transaction_id, payer_id, amount_float, participants, group_id, custom_splits=None, tx_type=TransactionType.EXPENSE.name, description="", location="", timestamp=None, category="OTHER"):
         """
@@ -189,6 +146,7 @@ class GroupService(BaseService):
                 # 步驟 4: 立即檢查狀態機 (若為單人群組或代墊人已確認，應自動提升主表狀態)
                 self._update_main_transaction_status(cursor, transaction_id)
                 
+                conn.commit()
                 return True
             except Exception as e:
                 print(f"發起交易時發生錯誤: {e}")
@@ -255,6 +213,7 @@ class GroupService(BaseService):
                 
                 # 5. 立即檢查並推進狀態機
                 self._update_main_transaction_status(cursor, transaction_id)
+                conn.commit()
                 return True
             except Exception as e:
                 print(f"修改交易時發生錯誤: {e}")

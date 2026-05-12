@@ -154,15 +154,6 @@ def request_settlement(debtor_id: str = Body(...), creditor_id: str = Body(...),
 
 # --- 預算與分析 ---
 
-@app.get("/api/group/{group_id}/budget")
-def get_group_budget(group_id: str):
-    return system.get_group_budget_status(group_id)
-
-@app.post("/api/group/{group_id}/budget")
-def set_group_budget(group_id: str, amount: float = Body(..., embed=True)):
-    if system.set_group_budget(group_id, amount):
-        return {"success": True}
-    raise HTTPException(status_code=500, detail="Set budget failed")
 
 @app.get("/api/group/{group_id}/summary")
 def get_group_summary(group_id: str):

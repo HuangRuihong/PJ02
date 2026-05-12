@@ -13,8 +13,8 @@ class BaseService:
         self._init_db()
 
     def _get_connection(self):
-        """取得資料庫連接"""
-        return sqlite3.connect(self.db_path)
+        """取得資料庫連接 (增加 timeout 避免併發鎖定)"""
+        return sqlite3.connect(self.db_path, timeout=30.0)
 
     def _init_db(self):
         """建立資料庫表結構 (如果不存在)"""

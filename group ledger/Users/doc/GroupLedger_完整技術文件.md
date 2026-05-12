@@ -53,8 +53,9 @@ stateDiagram-v2
 
 ### 3.2 代理人網路同步 (Network Facade)
 我們實作了 `intelligence/network_facade.py` 作為中介 Proxy：
-- 攔截前端所有 `propose_transaction` 或 `settle_debts` 呼叫。
-- 利用 Python `requests` 模組透過 HTTP 將資料傳遞給位於 `server/api_server.py` 的 FastAPI 服務器。
+- **REST 封裝**：將所有本地端調用轉換為 HTTP JSON API 請求。
+- **健壯性設計**：具備自動重試機制 (Retry Mechanism) 與結構化錯誤回報，防止介面因網路波動崩潰。
+- **配置解耦**：透過 `dotenv` 讀取外部配置，支援動態切換伺服器位址。
 
 ### 3.3 智慧結算與抵銷演算法 (Greedy Algorithm)
 在 `groups/group_service.py` 中使用的算法核心：
@@ -111,6 +112,18 @@ splits[uid] = base + (1 if i < rem else 0)
 | **Matplotlib** | 圖表生成 | `matplotlib` |
 | **Tkcalendar** | 圖形化日曆選擇器 | `tkcalendar` |
 | **Pillow** | 處理圖片資源與介面圖示 | `pillow` |
+| **Dotenv** | 環境變數管理 | `python-dotenv` |
+
+### 5.2 環境配置 (Environment Configuration)
+專案採用 `.env` 檔案管理機敏與環境相關配置。
+
+**配置項目範例**：
+```env
+API_BASE_URL=http://127.0.0.1:8000
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+DEBUG=True
+```
 
 ---
 
@@ -118,7 +131,7 @@ splits[uid] = base + (1 if i < rem else 0)
 
 ### 6.1 每日開工同步規範
 1. **基線同步 (`tools/sync_latest.bat`)**：每天寫程式前，請執行以取得最新版本。
-2. **連網服務開啟**：啟動 `server/api_server.py` (或 `start_server.bat`)。
+2. **連網服務開啟**：啟動 `server/run_online_A.bat` (啟動 API 伺服器)。
 
 ### 6.2 開發完成後提交
 1. **自動化上傳 (`tools/upload_changes.bat`)**：執行此腳本自動提交並推送到遠端。

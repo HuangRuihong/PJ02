@@ -36,7 +36,7 @@ class NetworkDebtSystem:
 
     def join_group_by_code(self, user_id, join_code):
         res = self._post("/api/group/join", {"user_id": user_id, "code": join_code})
-        return res.get("status") == "success"
+        return res.get("success", False)
 
     def get_user_groups(self, user_id):
         return self._get(f"/api/groups/{user_id}")
@@ -110,6 +110,11 @@ class NetworkDebtSystem:
     def repay_transaction(self, group_id, tx_id, debtor_id, creditor_id, amount):
         data = {"group_id": group_id, "tx_id": tx_id, "debtor_id": debtor_id, "creditor_id": creditor_id, "amount": amount}
         res = self._post("/api/transaction/repay", data)
+        return res.get("success", False)
+
+    def request_settlement(self, debtor_id, creditor_id, amount, method, tx_ids):
+        data = {"debtor_id": debtor_id, "creditor_id": creditor_id, "amount": amount, "method": method, "tx_ids": tx_ids}
+        res = self._post("/api/transaction/request_settlement", data)
         return res.get("success", False)
 
     def get_notification_message(self, tx_id):

@@ -49,7 +49,7 @@ def get_group_members(group_id: str):
 @app.post("/api/group/join")
 def join_group(user_id: str = Body(...), code: str = Body(...)):
     if system.join_group_by_code(user_id, code):
-        return {"status": "success"}
+        return {"success": True}
     raise HTTPException(status_code=400, detail="Join group failed")
 
 @app.post("/api/group/create")
@@ -70,31 +70,53 @@ def propose_transaction(tx: TransactionPropose):
         category=tx.category
     )
     if success:
-        return {"status": "success"}
+        return {"success": True}
     raise HTTPException(status_code=500, detail="Propose transaction failed")
 
 @app.post("/api/transaction/confirm")
 def confirm_transaction(user_id: str = Body(...), transaction_id: str = Body(...)):
     if system.confirm_transaction(user_id, transaction_id):
-        return {"status": "success"}
+        return {"success": True}
     raise HTTPException(status_code=500, detail="Confirm transaction failed")
 
 @app.post("/api/transaction/reject")
 def reject_transaction(user_id: str = Body(...), transaction_id: str = Body(...)):
     if hasattr(system, "reject_transaction") and system.reject_transaction(user_id, transaction_id):
-        return {"status": "success"}
+        return {"success": True}
     raise HTTPException(status_code=500, detail="Reject transaction failed")
 
 @app.get("/api/group/{group_id}/transactions")
 def get_group_transactions(group_id: str):
     return system.get_group_transactions(group_id)
 
+@app.get("/api/group/{group_id}/balances")
+def get_group_balances(group_id: str):
+    return system.get_group_balances(group_id)
+
 @app.get("/api/transaction/{transaction_id}")
+@app.get("/api/transaction/{transaction_id}/details")
 def get_transaction_details(transaction_id: str):
     details = system.get_transaction_details(transaction_id)
     if details:
         return details
     raise HTTPException(status_code=404, detail="Transaction not found")
+
+@app.get("/api/transaction/{transaction_id}/notification")
+def get_notification(transaction_id: str):
+    msg = system.get_notification_message(transaction_id)
+    return {"message": msg}
+
+@app.post("/api/transaction/settle_specific")
+def settle_specific(debtor_id: str = Body(...), creditor_id: str = Body(...), tx_ids: List[str] = Body(...)):
+    if system.settle_specific_debts(debtor_id, creditor_id, tx_ids):
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="Specific settlement failed")
+
+@app.delete("/api/transaction/{transaction_id}")
+def delete_transaction(transaction_id: str):
+    if system.delete_transaction(transaction_id):
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="Delete transaction failed")
 
 # --- 個人債務與結算 ---
 
@@ -113,26 +135,55 @@ def get_personal_history(user_id: str):
 
 @app.post("/api/group/settle")
 def settle_debts(group_id: str = Body(...), user_id: str = Body(...), mode: str = "ORIGINAL"):
-    if system.settle_debts(group_id, user_id, mode=mode):
-        return {"status": "success"}
+    res = system.settle_debts(group_id, user_id, mode=mode)
+    if res:
+        return res
     raise HTTPException(status_code=500, detail="Settlement failed")
 
 @app.post("/api/transaction/repay")
-def request_repayment(debtor_id: str = Body(...), creditor_id: str = Body(...), amount: float = Body(...), method: str = Body(...), tx_ids: List[str] = Body(...)):
+def repay_transaction(group_id: str = Body(...), tx_id: str = Body(...), debtor_id: str = Body(...), creditor_id: str = Body(...), amount: float = Body(...)):
+    if system.repay_transaction(group_id, tx_id, debtor_id, creditor_id, amount):
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="Repayment failed")
+
+@app.post("/api/transaction/request_settlement")
+def request_settlement(debtor_id: str = Body(...), creditor_id: str = Body(...), amount: float = Body(...), method: str = Body(...), tx_ids: List[str] = Body(...)):
     if system.request_settlement(debtor_id, creditor_id, amount, method, tx_ids):
-        return {"status": "success"}
+        return {"success": True}
     raise HTTPException(status_code=500, detail="Repayment request failed")
+
+# --- 預算與分析 ---
+
+@app.get("/api/group/{group_id}/budget")
+def get_group_budget(group_id: str):
+    return system.get_group_budget_status(group_id)
+
+@app.post("/api/group/{group_id}/budget")
+def set_group_budget(group_id: str, amount: float = Body(..., embed=True)):
+    if system.set_group_budget(group_id, amount):
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="Set budget failed")
+
+@app.get("/api/group/{group_id}/summary")
+def get_group_summary(group_id: str):
+    summary = system.generate_group_bill_summary(group_id)
+    return {"summary": summary}
+
+@app.get("/api/group/{group_id}/analysis")
+def get_group_analysis(group_id: str):
+    return system.get_group_transactions(group_id)
+
+@app.delete("/api/group/{group_id}")
+def delete_group(group_id: str):
+    if system.delete_group(group_id):
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="Delete group failed")
 
 # --- 其他功能 ---
 
 @app.get("/api/system/overdue")
 def scan_overdue():
     return system.check_overdue_transactions()
-
-@app.get("/api/group/{group_id}/analysis")
-def get_group_analysis(group_id: str):
-    # 這部分邏輯通常在前端 Canvas 繪製，這裡回傳基礎數據
-    return system.get_group_transactions(group_id)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -238,7 +238,9 @@ class AccountingGUI(ctk.CTk):
             
             # 更新同步狀態顯示
             now_str = datetime.now().strftime("%H:%M:%S")
-            self.sync_label.configure(text=f"最後同步: {now_str}", text_color="#2ecc71")
+            from intelligence.network_facade import NetworkDebtSystem
+            mode_str = "(網路)" if isinstance(self.system, NetworkDebtSystem) else "(本地)"
+            self.sync_label.configure(text=f"最後同步 {mode_str}: {now_str}", text_color="#2ecc71")
             
         except Exception as e:
             self.sync_label.configure(text=f"連線異常: {str(e)[:15]}", text_color="#f39c12")

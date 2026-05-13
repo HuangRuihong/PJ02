@@ -1,5 +1,6 @@
 import uvicorn
-from fastapi import FastAPI, HTTPException, Body
+import socket
+from fastapi import FastAPI, HTTPException, Body, Request
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 from datetime import datetime
@@ -24,6 +25,32 @@ SERVER_PORT = int(os.getenv("SERVER_PORT", 8000))
 
 system = DebtSystem()
 
+def get_local_ip():
+    """自動偵測本機於區域網路中的 IP 位址"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # 嘗試連接 Google DNS (不會真正送出封包) 以獲取對外 IP
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
+local_ip = get_local_ip()
+print("==========================================")
+print(f" [Server Mode] Group Ledger API Server")
+print("==========================================")
+print(f"[Info] Server IP Address : {local_ip}")
+print(f"[Info] Client should connect to : http://{local_ip}:{SERVER_PORT}")
+print("")
+print(f"[Info] Starting API server on port {SERVER_PORT}...")
+print(f"[Info] Press Ctrl+C to stop the server.")
+print("------------------------------------------")
+print(f"[System] 資料庫已就緒: {os.path.abspath(system.db_path)}")
+print(f"[System] 等待客戶端連線...")
+
 # --- 資料模型 ---
 
 class TransactionPropose(BaseModel):
@@ -41,6 +68,14 @@ class TransactionPropose(BaseModel):
 
 # --- API 端點 ---
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """全局中介軟體：監控所有進入伺服器的連線"""
+    client_ip = request.client.host
+    print(f" >>> [連線進入] 來自 IP: {client_ip} | 請求方法: {request.method} | 路徑: {request.url.path}")
+    response = await call_next(request)
+    return response
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "Group Ledger API Server is running"}
@@ -49,6 +84,7 @@ def read_root():
 
 @app.get("/api/groups/{user_id}")
 def get_user_groups(user_id: str):
+    print(f"[Sync] 使用者 {user_id} 已連線，正在同步群組清單...")
     return system.get_user_groups(user_id)
 
 @app.get("/api/group/{group_id}/members")
@@ -57,21 +93,28 @@ def get_group_members(group_id: str):
 
 @app.post("/api/group/join")
 def join_group(user_id: str = Body(...), code: str = Body(...)):
+    print(f"[Group] 使用者 {user_id} 嘗試加入群組，代碼: {code}")
     if system.join_group_by_code(user_id, code):
+        print(f"[Group] 使用者 {user_id} 成功加入群組 {code}")
         return {"success": True}
+    print(f"[Group] 使用者 {user_id} 加入群組失敗")
     raise HTTPException(status_code=400, detail="Join group failed")
 
 @app.post("/api/group/create")
 def create_group(user_id: str = Body(...), name: str = Body(...)):
+    print(f"[Group] 使用者 {user_id} 正在建立群組: {name}")
     gid, code = system.create_group_with_code(user_id, name)
     if gid:
+        print(f"[Group] 群組建立成功！ ID: {gid}, 代碼: {code}")
         return {"group_id": gid, "code": code}
+    print(f"[Group] 群組建立失敗")
     raise HTTPException(status_code=500, detail="Create group failed")
 
 # --- 交易管理 ---
 
 @app.post("/api/transaction/propose")
 def propose_transaction(tx: TransactionPropose):
+    print(f"[Transaction] 收到新交易: {tx.description} (金額: {tx.amount}, 付款人: {tx.payer_id}, 群組: {tx.group_id})")
     success = system.propose_transaction(
         tx.transaction_id, tx.payer_id, tx.amount, tx.participants, 
         tx.group_id, tx.custom_splits, tx.tx_type, tx.description, 
@@ -79,13 +122,18 @@ def propose_transaction(tx: TransactionPropose):
         category=tx.category
     )
     if success:
+        print(f"[Transaction] 交易 {tx.transaction_id} 紀錄成功")
         return {"success": True}
+    print(f"[Transaction] 交易紀錄失敗")
     raise HTTPException(status_code=500, detail="Propose transaction failed")
 
 @app.post("/api/transaction/confirm")
 def confirm_transaction(user_id: str = Body(...), transaction_id: str = Body(...)):
+    print(f"[Transaction] 使用者 {user_id} 正在確認交易: {transaction_id}")
     if system.confirm_transaction(user_id, transaction_id):
+        print(f"[Transaction] 使用者 {user_id} 確認成功")
         return {"success": True}
+    print(f"[Transaction] 使用者 {user_id} 確認失敗")
     raise HTTPException(status_code=500, detail="Confirm transaction failed")
 
 @app.post("/api/transaction/reject")
@@ -96,6 +144,7 @@ def reject_transaction(user_id: str = Body(...), transaction_id: str = Body(...)
 
 @app.get("/api/group/{group_id}/transactions")
 def get_group_transactions(group_id: str):
+    print(f"[Sync] 正在抓取群組 {group_id} 的交易紀錄...")
     return system.get_group_transactions(group_id)
 
 @app.get("/api/group/{group_id}/balances")
@@ -131,11 +180,13 @@ def delete_transaction(transaction_id: str):
 
 @app.get("/api/user/{user_id}/debts")
 def get_personal_debts(user_id: str):
+    print(f"[Sync] 使用者 {user_id} 正在請求個人債務清單 (應收/應付)...")
     payables, receivables = system.get_personal_debts(user_id)
     return {"payables": payables, "receivables": receivables}
 
 @app.get("/api/user/{user_id}/summary")
 def get_user_summary(user_id: str):
+    print(f"[Sync] 使用者 {user_id} 正在同步個人帳單摘要...")
     return system.get_user_summary(user_id)
 
 @app.get("/api/user/{user_id}/history")

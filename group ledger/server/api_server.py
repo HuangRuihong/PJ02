@@ -25,6 +25,9 @@ SERVER_PORT = int(os.getenv("SERVER_PORT", 8000))
 
 system = DebtSystem()
 
+# 用於記錄已顯示過連線訊息的 IP，避免重複洗版
+logged_ips = set()
+
 def get_local_ip():
     """自動偵測本機於區域網路中的 IP 位址"""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -72,7 +75,11 @@ class TransactionPropose(BaseModel):
 async def log_requests(request: Request, call_next):
     """全局中介軟體：監控所有進入伺服器的連線"""
     client_ip = request.client.host
-    print(f" >>> [連線進入] 來自 IP: {client_ip} | 請求方法: {request.method} | 路徑: {request.url.path}")
+    # 僅針對第一次連線的 IP 顯示進入訊息，減少負擔
+    if client_ip not in logged_ips:
+        print(f" >>> [連線進入] 來自 IP: {client_ip} | 歡迎使用者進入系統")
+        logged_ips.add(client_ip)
+    
     response = await call_next(request)
     return response
 
@@ -84,7 +91,6 @@ def read_root():
 
 @app.get("/api/groups/{user_id}")
 def get_user_groups(user_id: str):
-    print(f"[Sync] 使用者 {user_id} 已連線，正在同步群組清單...")
     return system.get_user_groups(user_id)
 
 @app.get("/api/group/{group_id}/members")
@@ -186,7 +192,6 @@ def get_personal_debts(user_id: str):
 
 @app.get("/api/user/{user_id}/summary")
 def get_user_summary(user_id: str):
-    print(f"[Sync] 使用者 {user_id} 正在同步個人帳單摘要...")
     return system.get_user_summary(user_id)
 
 @app.get("/api/user/{user_id}/history")

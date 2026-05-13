@@ -17,7 +17,9 @@ class NetworkDebtSystem:
     """
     def __init__(self, base_url=None):
         # 優先順序：建構子參數 > 環境變數 > 預設值
-        self.base_url = base_url or os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+        url = base_url or os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+        # 自動去除結尾斜線，避免拼接時出現雙斜線 (//api)
+        self.base_url = url.rstrip("/")
         self.current_user = None
 
     def _post(self, path, data, retries=2):

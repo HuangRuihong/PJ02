@@ -6,11 +6,28 @@ import argparse
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
+def auto_install_dependencies():
+    """自動檢查並安裝 requirements.txt 中的套件"""
+    req_path = os.path.join(current_dir, "requirements.txt")
+    if os.path.exists(req_path):
+        import subprocess
+        print("   [System] 正在檢查必要套件 (這可能需要一點時間)...")
+        try:
+            # 使用 -q 進行靜默安裝，避免過多日誌干擾
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_path, "-q"])
+            print("   [System] 套件檢查完成。")
+        except Exception as e:
+            print(f"   [警告] 自動安裝套件時發生錯誤: {e}")
+            print("   [提示] 請手動執行：pip install -r requirements.txt")
+
+# 在匯入任何可能失敗的外部模組前先執行安裝
+auto_install_dependencies()
+
 try:
     # AccountingGUI 模組位於根目錄
     from main_gui import AccountingGUI
 except ImportError as e:
-    print(f" 錯誤：找不到主介面模組 ({e})。請確保在專案根目錄執行此腳本。")
+    print(f" 錯誤：找不到主介面模組或缺少套件 ({e})。")
     sys.exit(1)
 
 if __name__ == "__main__":
@@ -30,7 +47,7 @@ if __name__ == "__main__":
             system = NetworkDebtSystem(base_url=args.host)
         except ImportError as e:
             print(f"   [錯誤] 無法載入網路模組 ({e})")
-            print("   [提示] 請檢查是否已安裝 requests 套件：pip install requests")
+            print("   [提示] 請確保已安裝必要套件：pip install requests python-dotenv")
             print("   將嘗試以本地模式啟動...")
             system = None
         except Exception as e:

@@ -84,7 +84,19 @@ def start_dev_server():
     else:
         print(f"[錯誤] 找不到伺服器啟動檔: {server_bat}")
 
+def check_git_presence():
+    """檢查系統是否已安裝 Git"""
+    try:
+        subprocess.run(["git", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("\n[錯誤] 偵測不到 Git 環境！")
+        print(" >> 請先安裝 Git: https://git-scm.com/download/win")
+        print(" >> 安裝後請重開此工具。")
+        return False
+
 def upload_changes():
+    if not check_git_presence(): return
     root_dir, _, _ = get_base_dirs()
     print("\n[功能] 正在準備上傳變更到伺服器...")
     run_command("git status -s", cwd=root_dir)
@@ -111,6 +123,7 @@ def upload_changes():
         os.remove(msg_file)
 
 def sync_latest():
+    if not check_git_presence(): return
     root_dir, _, _ = get_base_dirs()
     print("\n[功能] 正在同步最新版本...")
     if run_command("git pull origin master", cwd=root_dir):
